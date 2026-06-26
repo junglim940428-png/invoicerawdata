@@ -648,12 +648,42 @@ function onFileSelected(file) {
       <div class="pi-card"><div class="pi-l">신규 추가 예상</div><div class="pi-v blue">${(rows.length - dupCount).toLocaleString()}</div></div>
     `;
 
-    // 미리보기 테이블 — 전체 헤더, 최대 20행 표시
-    const PREV = Math.min(rows.length, 20);
-    document.getElementById('previewHead').innerHTML = hdrs.map(h => `<th style="white-space:nowrap">${h}</th>`).join('');
-    document.getElementById('previewBody').innerHTML = rows.slice(0, PREV).map(r =>
-      `<tr>${hdrs.map(h => `<td>${r[h]}</td>`).join('')}</tr>`
-    ).join('') + (rows.length > PREV ? `<tr><td colspan="${hdrs.length}" style="text-align:center;padding:8px;color:#94a3b8;font-size:11px;">... 외 ${rows.length - PREV}행 (전체 ${rows.length}건)</td></tr>` : '');
+    // 헤더별 요약 카드 렌더링 (전체 행 기준)
+    document.getElementById('previewHead').innerHTML = '';
+    document.getElementById('previewBody').innerHTML = '';
+
+    const summaryHtml = hdrs.map(h => {
+      const vals = rows.map(r => String(r[h] || '').trim()).filter(v => v !== '');
+      const uniqueVals = [...new Set(vals)];
+      const total = vals.length;
+      const uniqueCount = uniqueVals.length;
+
+      // 값 빈도 계산
+      const freq = {};
+      vals.forEach(v => { freq[v] = (freq[v] || 0) + 1; });
+      const sorted = Object.entries(freq).sort((a,b) => b[1] - a[1]);
+
+      // 상위 5개 값 표시
+      const topItems = sorted.slice(0, 5).map(([v, cnt]) =>
+        `<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #f1f5f9;font-size:11px;">
+          <span style="color:#334155;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px;" title="${v}">${v || '(빈값)'}</span>
+          <span style="color:#3b82f6;font-weight:700;margin-left:8px;flex-shrink:0;">${cnt}건</span>
+        </div>`
+      ).join('');
+
+      const moreCount = sorted.length > 5 ? `<div style="font-size:10px;color:#94a3b8;padding-top:4px;">외 ${sorted.length - 5}개 값...</div>` : '';
+
+      return `
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px;min-width:180px;max-width:260px;">
+          <div style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">${h}</div>
+          <div style="font-size:18px;font-weight:800;color:#1e293b;">${uniqueCount.toLocaleString()} <span style="font-size:11px;font-weight:400;color:#94a3b8;">종류 / ${total.toLocaleString()}건</span></div>
+          <div style="margin-top:8px;">${topItems}${moreCount}</div>
+        </div>`;
+    }).join('');
+
+    // 요약 카드를 테이블 영역 대신 그리드로 표시
+    const previewTableWrap = document.querySelector('#previewCard .table-scroll');
+    previewTableWrap.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:12px;padding:16px;">${summaryHtml}</div>`;
 
     document.getElementById('previewCard').style.display = '';
     hideUploadMessages();
