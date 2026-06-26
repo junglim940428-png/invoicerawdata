@@ -1,0 +1,38 @@
+name: S/N 데이터 처리 및 DB 업데이트
+
+on:
+  push:
+    paths:
+      - 'raw_data/**'
+  workflow_dispatch:
+
+jobs:
+  process:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: 저장소 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Python 설치
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 의존성 설치
+        run: pip install openpyxl
+
+      - name: 데이터 처리
+        run: python scripts/process.py
+
+      - name: db.json 커밋 & 푸시
+        run: |
+          git config user.name  "GitHub Actions Bot"
+          git config user.email "actions@github.com"
+          git add data/db.json
+          git diff --staged --quiet && echo "변경사항 없음" || (
+            git commit -m "🔄 DB 업데이트: $(date '+%Y-%m-%d %H:%M')"
+            git push
+          )
