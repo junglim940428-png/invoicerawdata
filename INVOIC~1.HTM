@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LCD QC · S/N 검색</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f0f4f8;color:#1e293b;min-height:100vh;}
+
+.nav{background:#0f172a;display:flex;align-items:center;position:sticky;top:0;z-index:200;}
+.nav-logo{padding:0 20px;color:#fff;font-size:14px;font-weight:700;border-right:1px solid #1e293b;height:48px;display:flex;align-items:center;gap:8px;white-space:nowrap;}
+.nav-logo small{font-size:11px;font-weight:400;color:#64748b;}
+.nav-tabs{display:flex;}
+.nav-tab{padding:0 20px;height:48px;display:flex;align-items:center;font-size:13px;font-weight:500;color:#94a3b8;cursor:pointer;border-bottom:2px solid transparent;transition:all .15s;white-space:nowrap;}
+.nav-tab:hover{color:#e2e8f0;} .nav-tab.active{color:#fff;border-bottom-color:#3b82f6;}
+.nav-right{margin-left:auto;padding:0 16px;display:flex;align-items:center;gap:10px;}
+.db-badge{font-size:11px;background:#1e3a5f;color:#93c5fd;border-radius:20px;padding:3px 10px;font-weight:600;white-space:nowrap;}
+
+.status-bar{padding:8px 20px;display:flex;align-items:center;gap:10px;font-size:12px;border-bottom:1px solid #e2e8f0;flex-wrap:wrap;}
+.status-bar.ok{background:#f0fdf4;color:#166534;}
+.status-bar.loading{background:#fffbeb;color:#92400e;}
+.status-bar.error{background:#fef2f2;color:#991b1b;}
+.status-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+.status-bar.ok .status-dot{background:#16a34a;}
+.status-bar.loading .status-dot{background:#f59e0b;animation:pulse 1s infinite;}
+.status-bar.error .status-dot{background:#ef4444;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.status-bar .s-right{margin-left:auto;display:flex;gap:8px;}
+
+.page{display:none;max-width:1400px;margin:0 auto;padding:20px;}
+.page.active{display:block;}
+
+.card{background:#fff;border-radius:12px;border:1px solid #e2e8f0;overflow:hidden;margin-bottom:14px;}
+.card-header{padding:12px 20px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;gap:10px;background:#fafafa;}
+.card-header h2{font-size:13px;font-weight:600;color:#374151;flex:1;}
+.card-header .hint{font-size:11px;color:#94a3b8;}
+.card-body{padding:18px 20px;}
+
+.btn{border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:5px;transition:all .15s;white-space:nowrap;}
+.btn:disabled{opacity:.4;cursor:not-allowed;}
+.btn-blue{background:#3b82f6;color:#fff;} .btn-blue:hover:not(:disabled){background:#2563eb;}
+.btn-green{background:#16a34a;color:#fff;} .btn-green:hover:not(:disabled){background:#15803d;}
+.btn-dark{background:#0f172a;color:#fff;} .btn-dark:hover:not(:disabled){background:#1e293b;}
+.btn-ghost{background:#f1f5f9;color:#475569;border:1px solid #e2e8f0;} .btn-ghost:hover:not(:disabled){background:#e2e8f0;}
+.btn-purple{background:#7c3aed;color:#fff;} .btn-purple:hover:not(:disabled){background:#6d28d9;}
+.btn-purple.on{background:#4f46e5;box-shadow:0 0 0 3px #c7d2fe;}
+.btn-full{width:100%;justify-content:center;}
+.btn-orange{background:#ea580c;color:#fff;} .btn-orange:hover:not(:disabled){background:#c2410c;}
+
+/* 검색 */
+.search-panel{display:grid;grid-template-columns:160px 1fr auto;gap:14px;align-items:start;}
+@media(max-width:700px){.search-panel{grid-template-columns:1fr;}}
+.field-label{font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;}
+select.year-select{width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;background:#fff;outline:none;cursor:pointer;}
+select.year-select:focus{border-color:#3b82f6;box-shadow:0 0 0 3px #eff6ff;}
+.sn-input-wrap{position:relative;}
+.sn-textarea{width:100%;padding:10px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:12.5px;font-family:monospace;resize:vertical;min-height:90px;outline:none;line-height:1.7;transition:border-color .15s;}
+.sn-textarea:focus{border-color:#3b82f6;box-shadow:0 0 0 3px #eff6ff;}
+.sn-textarea.barcode-on{border-color:#7c3aed;box-shadow:0 0 0 3px #ede9fe;background:#faf5ff;}
+.sn-textarea::placeholder{color:#94a3b8;font-family:inherit;}
+.barcode-indicator{display:none;position:absolute;top:8px;right:10px;font-size:11px;color:#7c3aed;font-weight:700;background:#ede9fe;padding:2px 8px;border-radius:10px;animation:blink 1.2s infinite;}
+.barcode-indicator.show{display:block;}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.4}}
+.search-actions-col{display:flex;flex-direction:column;gap:8px;padding-top:22px;}
+.scan-counter{font-size:11px;color:#7c3aed;font-weight:600;background:#ede9fe;padding:2px 8px;border-radius:10px;}
+
+.sn-tags{display:flex;gap:6px;flex-wrap:wrap;padding:10px 20px;border-bottom:1px solid #f1f5f9;background:#fafafa;align-items:center;}
+.sn-tag{font-size:11px;padding:3px 9px;border-radius:20px;font-family:monospace;font-weight:600;}
+.sn-tag.found{background:#f0fdf4;color:#166534;border:1px solid #bbf7d0;}
+.sn-tag.notfound{background:#fef2f2;color:#991b1b;border:1px solid #fecaca;}
+.tags-clear{font-size:11px;color:#94a3b8;cursor:pointer;margin-left:auto;} .tags-clear:hover{color:#ef4444;}
+
+.result-bar{display:flex;align-items:center;gap:14px;padding:10px 20px;border-bottom:1px solid #f1f5f9;background:#f8fafc;flex-wrap:wrap;}
+.result-stat{font-size:12px;color:#64748b;} .result-stat strong{color:#1e293b;font-weight:700;}
+.result-stat.warn strong{color:#ef4444;}
+.result-bar-right{margin-left:auto;display:flex;gap:8px;}
+
+.table-scroll{overflow-x:auto;max-height:560px;overflow-y:auto;}
+table{width:100%;border-collapse:collapse;font-size:12.5px;}
+thead{position:sticky;top:0;z-index:10;}
+thead tr{background:#f8fafc;border-bottom:2px solid #e2e8f0;}
+th{padding:10px 14px;text-align:left;font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;cursor:pointer;user-select:none;}
+th:hover{color:#3b82f6;} th.sorted{color:#3b82f6;}
+td{padding:9px 14px;border-bottom:1px solid #f1f5f9;white-space:nowrap;color:#334155;}
+tr:hover td{background:#f8fafc;}
+.td-sn{font-family:monospace;font-weight:700;color:#0f172a;}
+.td-badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;}
+.grade-A{background:#dcfce7;color:#166534;} .grade-B{background:#fef9c3;color:#854d0e;}
+.grade-Z{background:#f1f5f9;color:#475569;} .grade-other{background:#ffe4e6;color:#9f1239;}
+.table-empty{text-align:center;padding:48px 20px;color:#94a3b8;font-size:13px;}
+.table-empty .icon{font-size:38px;margin-bottom:10px;}
+.table-footer{padding:9px 20px;background:#f8fafc;border-top:1px solid #f1f5f9;font-size:11px;color:#94a3b8;display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;}
+.table-footer strong{color:#374151;}
+
+/* 업로드 페이지 */
+.upload-zone{border:2px dashed #cbd5e1;border-radius:12px;padding:40px 20px;text-align:center;cursor:pointer;transition:all .2s;background:#fafafa;}
+.upload-zone:hover,.upload-zone.drag{border-color:#3b82f6;background:#eff6ff;}
+.upload-zone .uz-icon{font-size:36px;margin-bottom:10px;}
+.upload-zone p{font-size:13px;color:#475569;margin-bottom:4px;}
+.upload-zone small{font-size:11px;color:#94a3b8;}
+
+.pat-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+.pat-input{flex:1;min-width:200px;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;font-family:monospace;outline:none;}
+.pat-input:focus{border-color:#3b82f6;box-shadow:0 0 0 3px #eff6ff;}
+.pat-saved{font-size:11px;color:#16a34a;font-weight:600;}
+
+.preview-info{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px;}
+.pi-card{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 16px;min-width:100px;}
+.pi-card .pi-l{font-size:10px;color:#94a3b8;font-weight:600;text-transform:uppercase;}
+.pi-card .pi-v{font-size:18px;font-weight:800;color:#1e293b;margin-top:2px;}
+.pi-card .pi-v.blue{color:#3b82f6;} .pi-card .pi-v.orange{color:#ea580c;}
+
+.upload-progress{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:14px 18px;display:none;}
+.upload-progress.show{display:block;}
+.up-title{font-size:13px;font-weight:600;color:#166534;margin-bottom:6px;}
+.up-msg{font-size:12px;color:#15803d;line-height:1.7;}
+.upload-error{background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:14px 18px;display:none;}
+.upload-error.show{display:block;}
+.ue-title{font-size:13px;font-weight:600;color:#991b1b;margin-bottom:6px;}
+.ue-msg{font-size:12px;color:#b91c1c;line-height:1.7;}
+
+.step-box{border-radius:12px;border:1px solid #e2e8f0;padding:20px;margin-bottom:14px;background:#fff;}
+.step-box h3{font-size:13px;font-weight:700;color:#1e293b;margin-bottom:10px;display:flex;align-items:center;gap:8px;}
+.step-num{width:22px;height:22px;border-radius:50%;background:#3b82f6;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.step-box p{font-size:12px;color:#475569;line-height:1.7;margin-bottom:10px;}
+.step-box code{background:#f1f5f9;padding:2px 6px;border-radius:4px;font-size:12px;color:#0f172a;font-family:monospace;}
+
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;}
+.stat-card{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px;}
+.stat-card .sl{font-size:11px;color:#94a3b8;font-weight:500;}
+.stat-card .sv{font-size:22px;font-weight:800;margin-top:2px;}
+.stat-card .sv.blue{color:#3b82f6;} .stat-card .sv.green{color:#16a34a;}
+.stat-card .ss{font-size:11px;color:#64748b;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+
+#toast{position:fixed;bottom:24px;right:24px;background:#0f172a;color:#fff;border-radius:10px;padding:12px 18px;font-size:13px;z-index:999;opacity:0;transform:translateY(10px);transition:all .3s;pointer-events:none;max-width:320px;}
+#toast.show{opacity:1;transform:translateY(0);}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-logo">🖥 LCD QC <small>인보이스 S/N 관리</small></div>
+  <div class="nav-tabs">
+    <div class="nav-tab active" onclick="showPage('p1',this)">🔍 S/N 검색</div>
+    <div class="nav-tab" onclick="showPage('p2',this)">📤 파일 업로드</div>
+  </div>
+  <div class="nav-right">
+    <span class="db-badge" id="dbBadge">로딩 중...</span>
+  </div>
+</nav>
+
+<div class="status-bar loading" id="statusBar">
+  <div class="status-dot"></div>
+  <span id="statusMsg">DB 데이터 로딩 중...</span>
+  <span class="s-right">
+    <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px;" onclick="loadDb()">🔄 새로고침</button>
+  </span>
+</div>
+
+<!-- ════ PAGE 1 : 검색 ════ -->
+<div class="page active" id="p1">
+  <div class="card">
+    <div class="card-header">
+      <h2>S/N 검색</h2>
+      <span class="hint">줄바꿈·쉼표로 여러 개 입력 · 바코드 리더 연속 스캔 지원</span>
+    </div>
+    <div class="card-body">
+      <div class="search-panel">
+        <div>
+          <div class="field-label">연도 선택</div>
+          <select class="year-select" id="yearSelect"><option value="ALL">전체 연도</option></select>
+          <div style="font-size:11px;color:#94a3b8;margin-top:5px;">연도 지정 시 검색 빠름</div>
+        </div>
+        <div>
+          <div class="field-label">
+            <span>시리얼 번호 입력</span>
+            <span id="scanCounter" class="scan-counter" style="display:none">스캔 0건</span>
+          </div>
+          <div class="sn-input-wrap">
+            <textarea class="sn-textarea" id="snInput"
+              placeholder="675516P5RQZZZS0100&#10;675526G3HMZZZS0100&#10;&#10;한 줄에 하나씩 또는 쉼표 구분&#10;바코드 리더 연속 스캔 가능"></textarea>
+            <div class="barcode-indicator" id="barcodeIndicator">● 바코드 스캔 대기중</div>
+          </div>
+        </div>
+        <div class="search-actions-col">
+          <button class="btn btn-blue" onclick="doSearch()" style="min-width:100px">🔍 검색</button>
+          <button class="btn btn-purple" id="barcodeBtn" onclick="toggleBarcode()">📷 바코드 모드</button>
+          <button class="btn btn-ghost" onclick="clearSearch()">초기화</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="snTagsWrap" style="display:none">
+    <div class="card" style="margin-bottom:14px;">
+      <div class="sn-tags" id="snTags"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="result-bar">
+      <span class="result-stat">검색 결과: <strong id="resultCount">-</strong></span>
+      <span class="result-stat warn" id="notFoundStat" style="display:none">미조회: <strong id="notFoundCount">0</strong>건</span>
+      <div class="result-bar-right">
+        <button class="btn btn-dark" id="downloadBtn" onclick="downloadResult()" disabled>⬇ 엑셀 다운로드</button>
+      </div>
+    </div>
+    <div class="table-scroll">
+      <table><thead><tr id="tableHead"></tr></thead><tbody id="tableBody"></tbody></table>
+      <div class="table-empty" id="tableEmpty">
+        <div class="icon">🔍</div>위에서 시리얼 번호를 입력하고 검색하세요.
+      </div>
+    </div>
+    <div class="table-footer" id="tableFooter" style="display:none">
+      <span>표시: <strong id="footerCount">0</strong>건</span>
+      <span>DB 전체: <strong id="totalCount">0</strong>건 · 업데이트: <strong id="lastUpdate">-</strong></span>
+    </div>
+  </div>
+</div>
+
+<!-- ════ PAGE 2 : 파일 업로드 ════ -->
+<div class="page" id="p2">
+
+  <!-- 파일 업로드 -->
+  <div class="card">
+    <div class="card-header"><h2>📁 인보이스 파일 선택</h2><span class="hint">xlsx 파일을 드래그하거나 클릭해서 선택</span></div>
+    <div class="card-body">
+      <input type="file" id="uploadFileInput" accept=".xlsx,.xls" style="display:none" onchange="onFileSelected(this.files[0])">
+      <div class="upload-zone" id="uploadZone"
+        onclick="document.getElementById('uploadFileInput').click()"
+        ondragover="event.preventDefault();this.classList.add('drag')"
+        ondragleave="this.classList.remove('drag')"
+        ondrop="this.classList.remove('drag');event.preventDefault();onFileSelected(event.dataTransfer.files[0])">
+        <div class="uz-icon">📂</div>
+        <p>xlsx 파일을 여기에 드래그하거나 클릭해서 선택하세요</p>
+        <small>지원 형식: .xlsx / .xls</small>
+      </div>
+      <div id="selectedFileName" style="margin-top:10px;font-size:12px;color:#475569;display:none"></div>
+    </div>
+  </div>
+
+  <!-- 미리보기 -->
+  <div class="card" id="previewCard" style="display:none">
+    <div class="card-header">
+      <h2>👁 데이터 미리보기 (검증)</h2>
+      <div style="display:flex;gap:8px;align-items:center;margin-left:auto;">
+        <button class="btn btn-ghost" onclick="resetUpload()" style="font-size:12px;padding:6px 12px;">다른 파일 선택</button>
+        <button class="btn btn-green" id="githubSaveBtn" onclick="saveToGitHub()" style="font-size:12px;padding:6px 14px;">
+          ☁️ GitHub에 저장
+        </button>
+      </div>
+    </div>
+    <div class="card-body" style="padding-bottom:10px;">
+      <div class="preview-info" id="previewInfo"></div>
+    </div>
+    <div class="table-scroll" style="max-height:400px;">
+      <table><thead><tr id="previewHead"></tr></thead><tbody id="previewBody"></tbody></table>
+    </div>
+  </div>
+
+  <!-- 진행 상태 -->
+  <div class="upload-progress" id="uploadProgress">
+    <div class="up-title">⏳ GitHub 업로드 중...</div>
+    <div class="up-msg" id="uploadProgressMsg"></div>
+  </div>
+  <div class="upload-error" id="uploadError">
+    <div class="ue-title">❌ 업로드 실패</div>
+    <div class="ue-msg" id="uploadErrorMsg"></div>
+  </div>
+  <div class="upload-progress" id="uploadSuccess" style="display:none;">
+    <div class="up-title">✅ 업로드 완료!</div>
+    <div class="up-msg" id="uploadSuccessMsg"></div>
+  </div>
+
+  <!-- 툴 자체 업데이트 -->
+  <div class="card" style="margin-top:14px;">
+    <div class="card-header"><h2>🔧 툴 HTML 업데이트</h2><span class="hint">Claude가 수정한 새 HTML 파일을 여기 올리면 GitHub에 자동 반영</span></div>
+    <div class="card-body">
+      <input type="file" id="htmlFileInput" accept=".html,.htm" style="display:none" onchange="onHtmlSelected(this.files[0])">
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+        <button class="btn btn-ghost" onclick="document.getElementById('htmlFileInput').click()">📂 새 HTML 파일 선택</button>
+        <span id="htmlFileName" style="font-size:12px;color:#475569;"></span>
+        <button class="btn btn-orange" id="htmlSaveBtn" onclick="saveHtmlToGitHub()" disabled style="margin-left:auto;">☁️ GitHub에 덮어쓰기</button>
+      </div>
+      <div style="font-size:11px;color:#94a3b8;margin-top:8px;">Claude에서 받은 invoice_rawdata.html 파일을 선택 → 덮어쓰기 버튼 클릭 → 1~2분 후 새로고침</div>
+      <div id="htmlUploadMsg" style="margin-top:8px;font-size:12px;display:none;"></div>
+    </div>
+  </div>
+
+  <!-- GitHub 토큰 (하단) -->
+  <div class="card" style="margin-top:14px;">
+    <div class="card-header"><h2>🔑 GitHub 토큰 (PAT)</h2><span class="hint">최초 1회만 입력 — 브라우저에 저장됩니다</span></div>
+    <div class="card-body">
+      <div class="pat-row">
+        <input type="password" class="pat-input" id="patInput" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx">
+        <button class="btn btn-blue" onclick="savePat()">저장</button>
+        <button class="btn btn-ghost" onclick="clearPat()">삭제</button>
+        <span id="patStatus" class="pat-saved" style="display:none">✅ 토큰 저장됨</span>
+      </div>
+      <div style="font-size:11px;color:#94a3b8;margin-top:10px;line-height:1.8;">
+        토큰 만드는 법: GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate new token<br>
+        권한: <strong>repo</strong> 체크 → Generate → 복사 후 위에 붙여넣기
+      </div>
+    </div>
+  </div>
+
+</div>
+
+
+<div id="toast"></div>
+
+<script>
+// ──────────────────────────────────────────────
+//  설정 (저장소 정보)
+// ──────────────────────────────────────────────
+const GH_OWNER = 'junglim940428-png';
+const GH_REPO  = 'invoicerawdata';
+const GH_BRANCH= 'main';
+
+// ──────────────────────────────────────────────
+//  상태
+// ──────────────────────────────────────────────
+let db          = [];
+let headers     = [];
+let lastResults = [];
+let barcodeMode = false;
+let barcodeTimer= null;
+let sortCol     = -1;
+let sortAsc     = true;
+let uploadFileBuffer = null;
+let uploadFileName   = null;
+
+// ──────────────────────────────────────────────
+//  DB 로드
+// ──────────────────────────────────────────────
+async function loadDb() {
+  setStatus('loading','DB 데이터 로딩 중...');
+  try {
+    const res = await fetch('./data/db.json?t=' + Date.now());
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    db      = data.db      || [];
+    headers = data.headers || [];
+    const lu = data.lastUpdate || '-';
+    const du = data.dupRemoved || 0;
+
+    document.getElementById('lastUpdate').textContent = lu;
+
+    updateCounts();
+    buildYearSelect();
+
+    if (db.length > 0) {
+      setStatus('ok', `✅ DB ${db.length.toLocaleString()}건 로드 완료 · 마지막 업데이트: ${lu}`);
+    } else {
+      setStatus('ok', 'ℹ DB가 비어 있습니다. 파일 업로드 탭에서 xlsx 파일을 올려주세요.');
+    }
+  } catch(e) {
+    setStatus('error', '⚠ DB 로드 실패: ' + e.message);
+    console.error(e);
+  }
+}
+
+// ──────────────────────────────────────────────
+//  검색
+// ──────────────────────────────────────────────
+function doSearch() {
+  const raw  = document.getElementById('snInput').value;
+  const year = document.getElementById('yearSelect').value;
+  const sns  = raw.split(/[\n,]+/).map(s=>s.trim().toUpperCase()).filter(Boolean);
+
+  if (!sns.length && year==='ALL') { showToast('시리얼 번호를 입력하거나 연도를 선택하세요.'); return; }
+
+  let pool = year==='ALL' ? db : db.filter(r=>{
+    const w=String(r['STOCK_IN_WEEK']||'').slice(0,4);
+    const t=String(r['SHIPPING_TIME']||'');
+    return w===year || t.includes(year);
+  });
+
+  let results=[], found=new Set(), notFound=[];
+  if (sns.length) {
+    const snKey = headers.find(h=>h==='SHIPPING_NO') || headers.find(h=>/serial|s\/n/i.test(h)) || headers[0]||'';
+    sns.forEach(sn=>{
+      const m=pool.filter(r=>String(r[snKey]||'').toUpperCase().includes(sn));
+      m.length ? (results.push(...m), found.add(sn)) : notFound.push(sn);
+    });
+    const seen=new Set();
+    results=results.filter(r=>{ const k=JSON.stringify(r); if(seen.has(k))return false; seen.add(k);return true; });
+  } else { results=pool; }
+
+  lastResults=results;
+
+  if (sns.length) {
+    document.getElementById('snTagsWrap').style.display='';
+    document.getElementById('snTags').innerHTML=
+      sns.map(sn=>`<span class="sn-tag ${found.has(sn)?'found':'notfound'}">${found.has(sn)?'✓':'✗'} ${sn}</span>`).join('')+
+      `<span class="tags-clear" onclick="clearSearch()">✕ 초기화</span>`;
+  } else { document.getElementById('snTagsWrap').style.display='none'; }
+
+  document.getElementById('notFoundStat').style.display = notFound.length?'':'none';
+  document.getElementById('notFoundCount').textContent  = notFound.length;
+  document.getElementById('resultCount').textContent    = results.length.toLocaleString()+'건';
+  document.getElementById('downloadBtn').disabled       = !results.length;
+  document.getElementById('tableFooter').style.display  = results.length?'':'none';
+  document.getElementById('footerCount').textContent    = results.length.toLocaleString();
+  renderTable(results);
+}
+
+function clearSearch() {
+  document.getElementById('snInput').value='';
+  document.getElementById('snTagsWrap').style.display='none';
+  document.getElementById('resultCount').textContent='-';
+  document.getElementById('notFoundStat').style.display='none';
+  document.getElementById('downloadBtn').disabled=true;
+  document.getElementById('tableFooter').style.display='none';
+  document.getElementById('tableHead').innerHTML='';
+  document.getElementById('tableBody').innerHTML='';
+  document.getElementById('tableEmpty').style.display='block';
+  document.getElementById('scanCounter').style.display='none';
+  lastResults=[]; sortCol=-1;
+}
+
+// ──────────────────────────────────────────────
+//  테이블 렌더링
+// ──────────────────────────────────────────────
+function renderTable(rows) {
+  if (sortCol>=0 && headers[sortCol]) {
+    const k=headers[sortCol];
+    rows=[...rows].sort((a,b)=>(sortAsc?1:-1)*String(a[k]||'').localeCompare(String(b[k]||'')));
+  }
+  document.getElementById('tableHead').innerHTML=headers.map((h,i)=>
+    `<th onclick="onSort(${i})" ${sortCol===i?'class="sorted"':''}>${h} <span style="opacity:.35">${sortCol===i?(sortAsc?'↑':'↓'):'↕'}</span></th>`
+  ).join('');
+  const body=document.getElementById('tableBody');
+  const empty=document.getElementById('tableEmpty');
+  if (!rows.length) { body.innerHTML=''; empty.style.display='block';
+    empty.innerHTML=db.length?'<div class="icon">❌</div>검색 결과가 없습니다.':'<div class="icon">📂</div>DB에 데이터가 없습니다.';
+    return; }
+  empty.style.display='none';
+  const MAX=2000;
+  body.innerHTML=rows.slice(0,MAX).map(r=>`<tr>${headers.map(h=>{
+    const raw=r[h]!==undefined?String(r[h]):'';
+    if(h==='FINAL_GRADE'||h==='GRADE'){const cls=raw==='A'?'grade-A':raw==='B'?'grade-B':raw==='Z'?'grade-Z':'grade-other';return `<td><span class="td-badge ${cls}">${raw}</span></td>`;}
+    if(h==='SHIPPING_NO'||/serial|s\/n/i.test(h))return `<td class="td-sn">${raw}</td>`;
+    return `<td>${raw}</td>`;
+  }).join('')}</tr>`).join('');
+  if(rows.length>MAX)body.innerHTML+=`<tr><td colspan="${headers.length}" style="text-align:center;padding:10px;color:#94a3b8;font-size:12px;">${rows.length.toLocaleString()}건 중 ${MAX.toLocaleString()}건 표시</td></tr>`;
+}
+
+function onSort(i) {
+  if(sortCol===i)sortAsc=!sortAsc; else{sortCol=i;sortAsc=true;}
+  renderTable(lastResults);
+}
+
+// ──────────────────────────────────────────────
+//  바코드 모드
+// ──────────────────────────────────────────────
+function toggleBarcode() {
+  barcodeMode=!barcodeMode;
+  const btn=document.getElementById('barcodeBtn');
+  const ind=document.getElementById('barcodeIndicator');
+  const ta =document.getElementById('snInput');
+  if(barcodeMode){
+    btn.classList.add('on'); btn.textContent='📷 바코드 ON';
+    ind.classList.add('show'); ta.classList.add('barcode-on'); ta.focus();
+  } else {
+    btn.classList.remove('on'); btn.textContent='📷 바코드 모드';
+    ind.classList.remove('show'); ta.classList.remove('barcode-on');
+  }
+}
+document.getElementById('snInput').addEventListener('keydown',function(e){
+  if(barcodeMode&&e.key==='Enter'){
+    clearTimeout(barcodeTimer);
+    barcodeTimer=setTimeout(()=>{
+      const lines=this.value.split('\n').filter(s=>s.trim());
+      document.getElementById('scanCounter').style.display='';
+      document.getElementById('scanCounter').textContent=`스캔 ${lines.length}건`;
+      doSearch();
+    },150);
+  }
+});
+
+// ──────────────────────────────────────────────
+//  다운로드
+// ──────────────────────────────────────────────
+function downloadResult() {
+  if(!lastResults.length){showToast('다운로드할 데이터가 없습니다.');return;}
+  const bom='﻿', hdr=headers.join(',');
+  const body=lastResults.map(r=>headers.map(h=>`"${String(r[h]||'').replace(/"/g,'""')}"`).join(','));
+  const csv=bom+[hdr,...body].join('\n');
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url; a.download=`SN_결과_${new Date().toISOString().slice(0,10)}.csv`; a.click();
+  URL.revokeObjectURL(url);
+  showToast(`⬇ ${lastResults.length.toLocaleString()}건 다운로드 완료`);
+}
+
+// ──────────────────────────────────────────────
+//  HTML 자동 업데이트
+// ──────────────────────────────────────────────
+let htmlFileContent = null;
+
+function onHtmlSelected(file) {
+  if (!file) return;
+  if (!/\.(html|htm)$/i.test(file.name)) { showToast('html 파일만 선택하세요.'); return; }
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    htmlFileContent = e.target.result;
+    document.getElementById('htmlFileName').textContent = '✅ ' + file.name;
+    document.getElementById('htmlSaveBtn').disabled = false;
+  };
+  reader.readAsText(file, 'utf-8');
+}
+
+async function saveHtmlToGitHub() {
+  const token = getPat();
+  if (!token) { showToast('먼저 GitHub 토큰을 입력해주세요.'); return; }
+  if (!htmlFileContent) { showToast('HTML 파일을 먼저 선택해주세요.'); return; }
+
+  const btn = document.getElementById('htmlSaveBtn');
+  const msgEl = document.getElementById('htmlUploadMsg');
+  btn.disabled = true;
+  btn.textContent = '⏳ 업로드 중...';
+  msgEl.style.display = '';
+  msgEl.style.color = '#92400e';
+  msgEl.textContent = 'GitHub에 업로드 중...';
+
+  try {
+    const path = 'invoice_rawdata.html';
+    const apiUrl = `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/${path}`;
+    const base64 = btoa(unescape(encodeURIComponent(htmlFileContent)));
+
+    // 현재 파일 SHA 가져오기
+    const checkRes = await fetch(apiUrl, {
+      headers: { 'Authorization': `token ${token}`, 'Accept': 'application/vnd.github.v3+json' }
+    });
+    if (!checkRes.ok) throw new Error('기존 파일 조회 실패');
+    const { sha } = await checkRes.json();
+
+    // 덮어쓰기
+    const putRes = await fetch(apiUrl, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `token ${token}`,
+        'Accept': 'application/vnd.github.v3+json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        message: `🔧 툴 업데이트: ${new Date().toLocaleDateString('ko-KR')}`,
+        content: base64,
+        sha,
+        branch: GH_BRANCH
+      })
+    });
+
+    if (!putRes.ok) {
+      const err = await putRes.json();
+      throw new Error(err.message || `HTTP ${putRes.status}`);
+    }
+
+    msgEl.style.color = '#166534';
+    msgEl.textContent = '✅ 업로드 완료! 1~2분 후 페이지를 새로고침하면 적용됩니다.';
+    showToast('✅ HTML 업데이트 완료!');
+    document.getElementById('htmlFileName').textContent = '';
+    htmlFileContent = null;
+    document.getElementById('htmlFileInput').value = '';
+  } catch(e) {
+    msgEl.style.color = '#991b1b';
+    msgEl.textContent = '❌ 실패: ' + e.message;
+    showToast('❌ ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '☁️ GitHub에 덮어쓰기';
+  }
+}
+
+// ──────────────────────────────────────────────
+//  GitHub PAT 관리
+// ──────────────────────────────────────────────
+function savePat() {
+  const val = document.getElementById('patInput').value.trim();
+  if (!val) { showToast('토큰을 입력해주세요.'); return; }
+  localStorage.setItem('ghPAT', val);
+  document.getElementById('patInput').value = '';
+  document.getElementById('patStatus').style.display = '';
+  showToast('✅ 토큰 저장 완료');
+}
+function clearPat() {
+  localStorage.removeItem('ghPAT');
+  document.getElementById('patInput').value = '';
+  document.getElementById('patStatus').style.display = 'none';
+  showToast('토큰 삭제됨');
+}
+function getPat() { return localStorage.getItem('ghPAT') || ''; }
+
+// 페이지 로드 시 토큰 상태 표시
+window.addEventListener('load', ()=>{
+  if (getPat()) document.getElementById('patStatus').style.display = '';
+});
+
+// ──────────────────────────────────────────────
+//  파일 업로드 & 미리보기
+// ──────────────────────────────────────────────
+function onFileSelected(file) {
+  if (!file) return;
+  if (!/\.(xlsx|xls)$/i.test(file.name)) {
+    showToast('xlsx 또는 xls 파일만 지원합니다.'); return;
+  }
+  uploadFileName = file.name;
+  document.getElementById('selectedFileName').style.display = '';
+  document.getElementById('selectedFileName').innerHTML = `📄 선택된 파일: <strong>${file.name}</strong> (${(file.size/1024).toFixed(1)} KB)`;
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    uploadFileBuffer = e.target.result;
+    // SheetJS로 미리보기 — 헤더 행 그대로 읽기
+    const wb = XLSX.read(new Uint8Array(e.target.result), {type:'array'});
+    const ws = wb.Sheets[wb.SheetNames[0]];
+
+    // header:1 옵션으로 2차원 배열 방식으로 읽어 첫 행을 헤더로 사용
+    const rawRows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+    if (!rawRows.length) { showToast('파일에 데이터가 없습니다.'); return; }
+
+    // 첫 행 = 헤더 (빈 셀 제외)
+    const hdrs = rawRows[0].map(h => String(h).trim()).filter(Boolean);
+    // 나머지 행 = 데이터 (빈 행 제외)
+    const rows = rawRows.slice(1)
+      .filter(r => r.some(v => v !== ''))
+      .map(r => {
+        const obj = {};
+        hdrs.forEach((h, i) => { obj[h] = r[i] !== undefined ? String(r[i]) : ''; });
+        return obj;
+      });
+
+    // 현재 DB와 중복 체크 (SHIPPING_NO 또는 첫 번째 컬럼 기준)
+    const snKey = hdrs.find(h => h === 'SHIPPING_NO') || hdrs[0] || '';
+    const existingKeys = new Set(db.map(r => String(r[snKey] || '')));
+    let dupCount = 0;
+    rows.forEach(r => { if (existingKeys.has(String(r[snKey] || ''))) dupCount++; });
+
+    // 미리보기 정보 카드
+    document.getElementById('previewInfo').innerHTML = `
+      <div class="pi-card"><div class="pi-l">총 행 수</div><div class="pi-v blue">${rows.length.toLocaleString()}</div></div>
+      <div class="pi-card"><div class="pi-l">컬럼 수</div><div class="pi-v">${hdrs.length}</div></div>
+      <div class="pi-card"><div class="pi-l">기존 DB 중복</div><div class="pi-v orange">${dupCount.toLocaleString()}</div></div>
+      <div class="pi-card"><div class="pi-l">신규 추가 예상</div><div class="pi-v blue">${(rows.length - dupCount).toLocaleString()}</div></div>
+    `;
+
+    // 미리보기 테이블 — 전체 헤더, 최대 20행 표시
+    const PREV = Math.min(rows.length, 20);
+    document.getElementById('previewHead').innerHTML = hdrs.map(h => `<th style="white-space:nowrap">${h}</th>`).join('');
+    document.getElementById('previewBody').innerHTML = rows.slice(0, PREV).map(r =>
+      `<tr>${hdrs.map(h => `<td>${r[h]}</td>`).join('')}</tr>`
+    ).join('') + (rows.length > PREV ? `<tr><td colspan="${hdrs.length}" style="text-align:center;padding:8px;color:#94a3b8;font-size:11px;">... 외 ${rows.length - PREV}행 (전체 ${rows.length}건)</td></tr>` : '');
+
+    document.getElementById('previewCard').style.display = '';
+    hideUploadMessages();
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function resetUpload() {
+  uploadFileBuffer = null;
+  uploadFileName = null;
+  document.getElementById('uploadFileInput').value = '';
+  document.getElementById('selectedFileName').style.display = 'none';
+  document.getElementById('previewCard').style.display = 'none';
+  hideUploadMessages();
+}
+
+function hideUploadMessages() {
+  document.getElementById('uploadProgress').classList.remove('show');
+  document.getElementById('uploadError').classList.remove('show');
+  document.getElementById('uploadSuccess').style.display = 'none';
+}
+
+// ──────────────────────────────────────────────
+//  GitHub API 업로드
+// ──────────────────────────────────────────────
+async function saveToGitHub() {
+  const token = getPat();
+  if (!token) { showToast('먼저 GitHub 토큰을 입력해주세요.'); return; }
+  if (!uploadFileBuffer || !uploadFileName) { showToast('파일을 먼저 선택해주세요.'); return; }
+
+  const btn = document.getElementById('githubSaveBtn');
+  btn.disabled = true;
+  btn.textContent = '⏳ 업로드 중...';
+  hideUploadMessages();
+
+  const prog = document.getElementById('uploadProgress');
+  const progMsg = document.getElementById('uploadProgressMsg');
+  prog.classList.add('show');
+
+  try {
+    // ArrayBuffer → base64
+    const uint8 = new Uint8Array(uploadFileBuffer);
+    let binary = '';
+    for (let i = 0; i < uint8.length; i++) binary += String.fromCharCode(uint8[i]);
+    const base64 = btoa(binary);
+
+    const path = `raw_data/${uploadFileName}`;
+    const apiUrl = `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/${path}`;
+
+    progMsg.textContent = '기존 파일 확인 중...';
+
+    // 기존 파일 SHA 확인 (같은 이름 파일이면 덮어쓰기)
+    let sha = null;
+    const checkRes = await fetch(apiUrl, {
+      headers: { 'Authorization': `token ${token}`, 'Accept': 'application/vnd.github.v3+json' }
+    });
+    if (checkRes.ok) {
+      const checkData = await checkRes.json();
+      sha = checkData.sha;
+    }
+
+    progMsg.textContent = `GitHub에 업로드 중... (${(uint8.length/1024).toFixed(1)} KB)`;
+
+    // 업로드
+    const body = {
+      message: `📥 인보이스 업로드: ${uploadFileName} (${new Date().toLocaleDateString('ko-KR')})`,
+      content: base64,
+      branch: GH_BRANCH,
+      ...(sha && { sha })
+    };
+
+    const putRes = await fetch(apiUrl, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `token ${token}`,
+        'Accept': 'application/vnd.github.v3+json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(body)
+    });
+
+    if (!putRes.ok) {
+      const err = await putRes.json();
+      throw new Error(err.message || `HTTP ${putRes.status}`);
+    }
+
+    prog.classList.remove('show');
+    const successEl = document.getElementById('uploadSuccess');
+    successEl.style.display = 'block';
+    document.getElementById('uploadSuccessMsg').innerHTML =
+      `✅ <strong>${uploadFileName}</strong> 을 GitHub raw_data/ 에 저장했습니다.<br>` +
+      `⚙️ GitHub Actions가 자동 실행되어 약 1~2분 후 DB가 업데이트됩니다.<br>` +
+      `🔄 업데이트 완료 후 S/N 검색 탭에서 새로고침 버튼을 눌러주세요.`;
+
+    showToast('✅ GitHub 업로드 완료! Actions 실행 중...');
+    resetUpload();
+
+  } catch(e) {
+    prog.classList.remove('show');
+    document.getElementById('uploadError').classList.add('show');
+    document.getElementById('uploadErrorMsg').textContent = e.message;
+    showToast('❌ 업로드 실패: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '☁️ GitHub에 저장 & Actions 실행';
+  }
+}
+
+// ──────────────────────────────────────────────
+//  헬퍼
+// ──────────────────────────────────────────────
+function buildYearSelect(){
+  const years=new Set();
+  db.forEach(r=>{
+    const w=String(r['STOCK_IN_WEEK']||'').slice(0,4); if(/^\d{4}$/.test(w))years.add(w);
+    const m=String(r['SHIPPING_TIME']||'').match(/\b(20\d{2})\b/); if(m)years.add(m[1]);
+  });
+  document.getElementById('yearSelect').innerHTML='<option value="ALL">전체 연도</option>'+
+    [...years].sort().reverse().map(y=>`<option value="${y}">${y}년</option>`).join('');
+}
+function updateCounts(){
+  const n=db.length.toLocaleString();
+  document.getElementById('dbBadge').textContent=`DB ${n}건`;
+  document.getElementById('totalCount').textContent=n;
+}
+function setStatus(type,msg){
+  const bar=document.getElementById('statusBar');
+  bar.className='status-bar '+type;
+  document.getElementById('statusMsg').textContent=msg;
+}
+function showPage(id,el){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById(id).classList.add('active'); el.classList.add('active');
+}
+let _tt;
+function showToast(msg){
+  const el=document.getElementById('toast');
+  el.textContent=msg; el.classList.add('show');
+  clearTimeout(_tt); _tt=setTimeout(()=>el.classList.remove('show'),2800);
+}
+
+loadDb();
+</script>
+</body>
+</html>
