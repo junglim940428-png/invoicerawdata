@@ -523,17 +523,18 @@ function onFileSelected(file){
       });
       const totC={};colVals.forEach(cv=>{totC[cv]=rowVals.reduce((s,rv)=>s+(data[rv]?.[cv]||0),0);});
       const grand=rowVals.reduce((s,rv)=>s+colVals.reduce((s2,cv)=>s2+(data[rv]?.[cv]||0),0),0);
-      const thead=`<tr style="background:#f8fafc"><th style="padding:7px 12px;font-size:13px;color:#64748b;font-weight:700;border-bottom:2px solid #e2e8f0;text-align:left">${rowKey}</th>${colVals.map(cv=>`<th style="padding:7px 12px;text-align:center;font-size:13px;font-weight:700;border-bottom:2px solid #e2e8f0;color:${gradeColor[cv]||'#374151'}">${cv}</th>`).join('')}<th style="padding:7px 12px;text-align:center;font-size:13px;font-weight:700;border-bottom:2px solid #e2e8f0;background:#f1f5f9">합계</th></tr>`;
-      const tbody=rowVals.map(rv=>{
+      const thead=`<tr style="background:#1e293b"><th style="padding:7px 14px;font-size:12px;color:#94a3b8;font-weight:700;border-bottom:2px solid #334155;text-align:left;white-space:nowrap">${rowKey}</th>${colVals.map(cv=>`<th style="padding:7px 14px;text-align:center;font-size:13px;font-weight:700;border-bottom:2px solid #334155;color:${gradeColor[cv]||'#e2e8f0'};min-width:60px">${cv}</th>`).join('')}<th style="padding:7px 14px;text-align:center;font-size:12px;font-weight:700;border-bottom:2px solid #334155;color:#94a3b8;min-width:55px">합계</th></tr>`;
+      const tbody=rowVals.map((rv,ri)=>{
         const rt=colVals.reduce((s,cv)=>s+(data[rv]?.[cv]||0),0);
-        return`<tr style="border-bottom:1px solid #f1f5f9"><td style="padding:6px 12px;font-size:14px;font-weight:600;color:#0f172a">${rv}</td>${colVals.map(cv=>{const v=data[rv]?.[cv]||0;return`<td style="padding:6px 12px;text-align:center;font-size:14px;color:${v?gradeColor[cv]||'#334155':'#cbd5e1'};font-weight:${v?700:400}">${v||'-'}</td>`;}).join('')}<td style="padding:6px 12px;text-align:center;font-size:14px;font-weight:800;background:#f8fafc">${rt}</td></tr>`;
+        const bg=ri%2===0?'#fff':'#f8fafc';
+        return`<tr style="background:${bg}"><td style="padding:6px 14px;font-size:14px;font-weight:600;color:#0f172a;white-space:nowrap;border-bottom:1px solid #f1f5f9">${rv}</td>${colVals.map(cv=>{const v=data[rv]?.[cv]||0;return`<td style="padding:6px 14px;text-align:center;font-size:14px;color:${v?gradeColor[cv]||'#334155':'#d1d5db'};font-weight:${v?700:400};border-bottom:1px solid #f1f5f9">${v||'·'}</td>`;}).join('')}<td style="padding:6px 14px;text-align:center;font-size:14px;font-weight:800;color:#1e293b;background:#f1f5f9;border-bottom:1px solid #e2e8f0">${rt}</td></tr>`;
       }).join('');
-      const tfoot=`<tr style="background:#f1f5f9;border-top:2px solid #e2e8f0"><td style="padding:6px 12px;font-size:14px;font-weight:700">합계</td>${colVals.map(cv=>`<td style="padding:6px 12px;text-align:center;font-size:14px;font-weight:700;color:${gradeColor[cv]||'#374151'}">${totC[cv]||0}</td>`).join('')}<td style="padding:6px 12px;text-align:center;font-size:15px;font-weight:800">${grand}</td></tr>`;
-      return`<div style="margin-bottom:20px"><div style="font-size:14px;font-weight:700;color:#374151;margin-bottom:8px">📊 ${title}</div><div style="overflow-x:auto;border-radius:8px;border:1px solid #e2e8f0"><table style="width:100%;border-collapse:collapse"><thead>${thead}</thead><tbody>${tbody}</tbody><tfoot>${tfoot}</tfoot></table></div></div>`;
+      const tfoot=`<tr style="background:#0f172a"><td style="padding:7px 14px;font-size:13px;font-weight:700;color:#e2e8f0">합계</td>${colVals.map(cv=>`<td style="padding:7px 14px;text-align:center;font-size:14px;font-weight:700;color:${gradeColor[cv]||'#e2e8f0'}">${totC[cv]||0}</td>`).join('')}<td style="padding:7px 14px;text-align:center;font-size:15px;font-weight:800;color:#fff">${grand}</td></tr>`;
+      return`<div style="margin-bottom:0"><div style="font-size:13px;font-weight:700;color:#374151;margin-bottom:8px;display:flex;align-items:center;gap:6px">📊 <span>${title}</span></div><div style="overflow-x:auto;border-radius:8px;border:1px solid #e2e8f0;box-shadow:0 1px 3px rgba(0,0,0,.06)"><table style="width:auto;min-width:100%;border-collapse:collapse"><thead>${thead}</thead><tbody>${tbody}</tbody><tfoot>${tfoot}</tfoot></table></div></div>`;
     }
-    const p1=makePivot(colInv,colGrade,'인보이스별 × 등급별');
-    const p2=makePivot(colModel,colGrade,'모델별 × 등급별');
-    const p3=makePivot(colInv,colModel,'인보이스별 × 모델별');
+    const p1=makePivot(colInv,colGrade,'인보이스 × 등급');
+    const p2=makePivot(colModel,colGrade,'모델 × 등급');
+    const p3=makePivot(colInv,colModel,'인보이스 × 모델');
 
     document.getElementById('previewContent').innerHTML=`
       <div style="padding:0 0 4px 0">
@@ -552,7 +553,7 @@ function onFileSelected(file){
           </table>
         </div>
       </div>
-      <div style="padding:16px">${p1}${p2}${p3}</div>`;
+      <div style="padding:16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;align-items:start">${p1}${p2}${p3}</div>`;
     document.getElementById('previewCard').style.display='';
     hideUploadMessages();
   };
