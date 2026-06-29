@@ -288,6 +288,7 @@ tr:hover td{background:#f8fafc;}
 
 <script>
 const GH_OWNER='junglim940428-png', GH_REPO='invoicerawdata', GH_BRANCH='main';
+const HTML_UPDATED='2026-06-29';
 let db=[],headers=[],lastResults=[],barcodeMode=false,barcodeTimer=null,sortCol=-1,sortAsc=true;
 let uploadFileBuffer=null,uploadFileName=null,htmlFileContent=null;
 
@@ -303,7 +304,7 @@ async function loadDb(){
     document.getElementById('lastUpdate').textContent=lu;
     updateCounts();buildYearSelect();
     setStatus(db.length>0?'ok':'ok',db.length>0
-      ?`✅ DB ${db.length.toLocaleString()}건 로드 완료 · 마지막 업데이트: ${lu}`
+      ?`✅ DB ${db.length.toLocaleString()}건 로드 완료 · DB 업데이트: ${lu} · 툴 업데이트: ${HTML_UPDATED}`
       :'ℹ DB가 비어 있습니다. 파일 업로드 탭에서 xlsx 파일을 올려주세요.');
   }catch(e){setStatus('error','⚠ DB 로드 실패: '+e.message);}
 }
