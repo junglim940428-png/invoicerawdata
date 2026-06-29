@@ -300,7 +300,17 @@ tr:hover td{background:#f8fafc;}
 
 <script>
 const GH_OWNER='junglim940428-png', GH_REPO='invoicerawdata', GH_BRANCH='main';
-const HTML_UPDATED='2026-06-29 08:30:00 UTC';
+const HTML_UPDATED='2026-06-29 07:35:50 UTC';
+function toKST(utcStr){
+  if(!utcStr||utcStr==='-')return utcStr;
+  const s=utcStr.replace(/ UTC$/,'').trim();
+  const d=new Date(s.replace(' ','T')+'Z');
+  if(isNaN(d.getTime()))return utcStr;
+  const opt={timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false};
+  const p=new Intl.DateTimeFormat('ko-KR',opt).formatToParts(d);
+  const g=t=>p.find(x=>x.type===t)?.value||'00';
+  return`${g('year')}/${g('month')}/${g('day')} ${g('hour')}:${g('minute')} KST`;
+}
 let db=[],headers=[],lastResults=[],barcodeMode=false,barcodeTimer=null,sortCol=-1,sortAsc=true;
 let uploadFileBuffer=null,uploadFileName=null,htmlFileContent=null;
 
@@ -313,10 +323,10 @@ async function loadDb(){
     const data=await res.json();
     db=data.db||[];headers=data.headers||[];
     const lu=data.lastUpdate||'-';
-    document.getElementById('lastUpdate').textContent=lu;
+    document.getElementById('lastUpdate').textContent=toKST(lu);
     updateCounts();buildYearSelect();
     setStatus(db.length>0?'ok':'ok',db.length>0
-      ?`✅ DB ${db.length.toLocaleString()}건 로드 완료 · DB 업데이트: ${lu} · 툴 업데이트: ${HTML_UPDATED}`
+      ?`✅ DB ${db.length.toLocaleString()}건 로드 완료 · DB 업데이트: ${toKST(lu)} · 툴 업데이트: ${toKST(HTML_UPDATED)}`
       :'ℹ DB가 비어 있습니다. 파일 업로드 탭에서 xlsx 파일을 올려주세요.');
   }catch(e){setStatus('error','⚠ DB 로드 실패: '+e.message);}
 }
