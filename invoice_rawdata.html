@@ -469,6 +469,7 @@ function onFileSelected(file){
   document.getElementById('selectedFileName').innerHTML=`📄 선택된 파일: <strong>${file.name}</strong> (${(file.size/1024).toFixed(1)} KB)`;
   // 대용량이면 즉시 로딩 표시
   if(isLarge){
+    document.getElementById('previewCard').style.display='';
     document.getElementById('previewInfo').innerHTML=`<div style="padding:10px 0;font-size:13px;color:#3b82f6;font-weight:600;">⏳ 대용량 파일(${fileSizeMB}MB) 전체 분석 중... 잠시 기다려주세요 (수십 초 소요될 수 있습니다)</div>`;
     document.getElementById('previewContent').innerHTML='';
   }
@@ -651,7 +652,12 @@ async function saveHtmlToGitHub(){
   msgEl.style.display='';msgEl.style.color='#92400e';msgEl.textContent='GitHub에 업로드 중...';
   try{
     const apiUrl=`https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/invoice_rawdata.html`;
-    const base64=btoa(unescape(encodeURIComponent(htmlFileContent)));
+    // 업로드 시각을 HTML_UPDATED에 자동 주입
+    const now=new Date();
+    const pad=n=>String(n).padStart(2,'0');
+    const nowUtc=`${now.getUTCFullYear()}-${pad(now.getUTCMonth()+1)}-${pad(now.getUTCDate())} ${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())}:${pad(now.getUTCSeconds())} UTC`;
+    const injected=htmlFileContent.replace(/const HTML_UPDATED='[^']*'/,`const HTML_UPDATED='${nowUtc}'`);
+    const base64=btoa(unescape(encodeURIComponent(injected)));
     const chk=await fetch(apiUrl,{headers:{'Authorization':`token ${token}`,'Accept':'application/vnd.github.v3+json'}});
     if(!chk.ok)throw new Error('기존 파일 조회 실패');
     const {sha}=await chk.json();
