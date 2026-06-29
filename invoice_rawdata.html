@@ -156,19 +156,29 @@ tr:hover td{background:#f8fafc;}
 <div class="page active" id="p1">
   <div class="card">
     <div class="card-header">
-      <h2>S/N 검색</h2>
-      <span class="hint">줄바꿈·쉼표로 여러 개 입력 · 바코드 리더 연속 스캔 지원</span>
+      <h2>🔍 통합 검색</h2>
+      <span class="hint" id="searchHint">줄바꿈·쉼표로 여러 개 입력 · 바코드 리더 연속 스캔 지원</span>
     </div>
     <div class="card-body">
       <div class="search-panel">
         <div>
+          <div class="field-label">검색 기준</div>
+          <select class="year-select" id="searchField" onchange="onSearchFieldChange()" style="font-weight:600;">
+            <option value="SHIPPING_NO">S/N (시리얼)</option>
+            <option value="INVOICE_NO">Invoice No</option>
+            <option value="MODEL_NO">Model No</option>
+            <option value="PART_NO">Part No.</option>
+            <option value="FINAL_GRADE">Grade</option>
+            <option value="CARTON_NO">Carton No</option>
+          </select>
+          <div style="margin-top:10px;">
           <div class="field-label">연도 선택</div>
           <select class="year-select" id="yearSelect"><option value="ALL">전체 연도</option></select>
-          <div style="font-size:11px;color:#94a3b8;margin-top:5px;">연도 지정 시 검색 빠름</div>
+          </div>
         </div>
         <div>
           <div class="field-label">
-            <span>시리얼 번호 입력</span>
+            <span id="inputLabel">시리얼 번호 입력</span>
             <span id="scanCounter" class="scan-counter" style="display:none">스캔 0건</span>
           </div>
           <div class="sn-input-wrap">
@@ -188,6 +198,8 @@ tr:hover td{background:#f8fafc;}
   <div id="snTagsWrap" style="display:none">
     <div class="card" style="margin-bottom:14px;"><div class="sn-tags" id="snTags"></div></div>
   </div>
+  <!-- 인보이스 요약 카드 (Invoice No 검색 시 표시) -->
+  <div id="invoiceSummaryWrap" style="display:none"></div>
   <div class="card">
     <div class="result-bar">
       <span class="result-stat">검색 결과: <strong id="resultCount">-</strong></span>
@@ -198,7 +210,7 @@ tr:hover td{background:#f8fafc;}
     </div>
     <div class="table-scroll">
       <table><thead><tr id="tableHead"></tr></thead><tbody id="tableBody"></tbody></table>
-      <div class="table-empty" id="tableEmpty"><div class="icon">🔍</div>위에서 시리얼 번호를 입력하고 검색하세요.</div>
+      <div class="table-empty" id="tableEmpty"><div class="icon">🔍</div>검색 기준을 선택하고 값을 입력해 검색하세요.</div>
     </div>
     <div class="table-footer" id="tableFooter" style="display:none">
       <span>표시: <strong id="footerCount">0</strong>건</span>
@@ -300,7 +312,7 @@ tr:hover td{background:#f8fafc;}
 
 <script>
 const GH_OWNER='junglim940428-png', GH_REPO='invoicerawdata', GH_BRANCH='main';
-const HTML_UPDATED='2026-06-29 08:32:19 UTC';
+const HTML_UPDATED='2026-06-29 08:41:39 UTC';
 function toKST(utcStr){
   if(!utcStr||utcStr==='-')return utcStr;
   const s=utcStr.replace(/ UTC$/,'').trim();
@@ -337,6 +349,16 @@ function doSearch(){
   const year=document.getElementById('yearSelect').value;
   const sns=raw.split(/[\n,]+/).map(s=>s.trim().toUpperCase()).filter(Boolean);
   if(!sns.length&&year==='ALL'){showToast('시리얼 번호를 입력하거나 연도를 선택하세요.');return;}
+  const searchField=document.getElementById('searchField').value;
+  // DB에서 실제 컬럼명 매핑 (헤더에 없으면 유사한 이름으로 fallback)
+  const resolveCol=key=>{
+    if(headers.includes(key))return key;
+    const map={INVOICE_NO:['INVOICE_NO','Invoice No','INVOICE NO'],MODEL_NO:['MODEL_NO','MODEL NO','Model'],
+      PART_NO:['PART_NO','PART NO','Part No'],FINAL_GRADE:['FINAL_GRADE','GRADE','Grade'],
+      CARTON_NO:['CARTON_NO','CARTON NO'],SHIPPING_NO:['SHIPPING_NO','S/N','SN']};
+    return (map[key]||[key]).find(k=>headers.includes(k))||headers[0]||'';
+  };
+  const col=resolveCol(searchField);
   let pool=year==='ALL'?db:db.filter(r=>{
     const w=String(r['STOCK_IN_WEEK']||'').slice(0,4);
     const t=String(r['SHIPPING_TIME']||'');
@@ -344,19 +366,19 @@ function doSearch(){
   });
   let results=[],found=new Set(),notFound=[];
   if(sns.length){
-    const snKey=headers.find(h=>h==='SHIPPING_NO')||headers.find(h=>/serial|s\/n/i.test(h))||headers[0]||'';
-    sns.forEach(sn=>{
-      const m=pool.filter(r=>String(r[snKey]||'').toUpperCase().includes(sn));
-      m.length?(results.push(...m),found.add(sn)):notFound.push(sn);
+    sns.forEach(q=>{
+      const m=pool.filter(r=>String(r[col]||'').toUpperCase().includes(q));
+      m.length?(results.push(...m),found.add(q)):notFound.push(q);
     });
     const seen=new Set();
     results=results.filter(r=>{const k=JSON.stringify(r);if(seen.has(k))return false;seen.add(k);return true;});
   }else{results=pool;}
   lastResults=results;
+  // 태그 표시
   if(sns.length){
     document.getElementById('snTagsWrap').style.display='';
     document.getElementById('snTags').innerHTML=
-      sns.map(sn=>`<span class="sn-tag ${found.has(sn)?'found':'notfound'}">${found.has(sn)?'✓':'✗'} ${sn}</span>`).join('')+
+      sns.map(q=>`<span class="sn-tag ${found.has(q)?'found':'notfound'}">${found.has(q)?'✓':'✗'} ${q}</span>`).join('')+
       `<span class="tags-clear" onclick="clearSearch()">✕ 초기화</span>`;
   }else{document.getElementById('snTagsWrap').style.display='none';}
   document.getElementById('notFoundStat').style.display=notFound.length?'':'none';
@@ -365,11 +387,99 @@ function doSearch(){
   document.getElementById('downloadBtn').disabled=!results.length;
   document.getElementById('tableFooter').style.display=results.length?'':'none';
   document.getElementById('footerCount').textContent=results.length.toLocaleString();
+  // Invoice No 검색이면 요약 카드 렌더링
+  document.getElementById('invoiceSummaryWrap').style.display='none';
+  if(searchField==='INVOICE_NO'&&results.length){
+    renderInvoiceSummary(results,sns);
+  }
   renderTable(results);
 }
+
+// ── 인보이스 요약 카드 ──
+function renderInvoiceSummary(rows, invoiceNos){
+  const colDate=headers.find(h=>/SHIPPING_TIME|SHIP.?DATE/i.test(h))||'';
+  const colInv=headers.find(h=>/INVOICE/i.test(h))||'';
+  const colModel=headers.find(h=>/MODEL/i.test(h))||'';
+  const colPart=headers.find(h=>/PART/i.test(h))||'';
+  const colGrade=headers.find(h=>/GRADE/i.test(h))||'';
+  const gradeColor={'A':'#166534','B':'#854d0e','Z':'#475569','N':'#1d4ed8','P':'#7c3aed'};
+  const gradeBgMap={'A':'#dcfce7','B':'#fef9c3','Z':'#f1f5f9','N':'#eff6ff','P':'#f3e8ff'};
+  // 인보이스별 그룹핑
+  const invoiceMap={};
+  rows.forEach(r=>{
+    const inv=colInv?String(r[colInv]||''):'-';
+    if(!invoiceMap[inv])invoiceMap[inv]={inv,date:colDate?formatDate(r[colDate]):'',rows:[]};
+    invoiceMap[inv].rows.push(r);
+  });
+  const cards=Object.values(invoiceMap).map(iv=>{
+    // 모델/파트/그레이드별 소계
+    const groupMap={};
+    iv.rows.forEach(r=>{
+      const model=colModel?String(r[colModel]||''):'-';
+      const part=colPart?String(r[colPart]||''):'-';
+      const grade=colGrade?String(r[colGrade]||''):'-';
+      const key=`${model}||${part}||${grade}`;
+      if(!groupMap[key])groupMap[key]={model,part,grade,qty:0};
+      groupMap[key].qty++;
+    });
+    const grouped=Object.values(groupMap).sort((a,b)=>a.model.localeCompare(b.model));
+    const totalQty=grouped.reduce((s,g)=>s+g.qty,0);
+    const rows_html=grouped.map(g=>{
+      const gc=gradeColor[g.grade]||'#334155';
+      const gbg=gradeBgMap[g.grade]||'#ffe4e6';
+      return`<tr>
+        <td style="padding:6px 12px;font-size:13px;">${g.model}</td>
+        <td style="padding:6px 12px;font-family:monospace;font-size:12px;">${g.part}</td>
+        <td style="padding:6px 12px;text-align:center;"><span class="grade-badge" style="background:${gbg};color:${gc};padding:2px 10px;border-radius:4px;font-weight:700;">${g.grade}</span></td>
+        <td style="padding:6px 12px;text-align:right;font-weight:700;font-size:14px;">${g.qty.toLocaleString()}</td>
+      </tr>`;
+    }).join('');
+    return`<div class="card" style="margin-bottom:12px;">
+      <div class="card-header" style="background:#f0f4f8;">
+        <h2 style="font-size:14px;font-weight:700;color:#0d2e5c;">📄 ${iv.inv}</h2>
+        <span style="font-size:12px;color:#64748b;margin-left:12px;">출하일: ${iv.date||'-'}</span>
+        <span style="margin-left:auto;font-size:13px;font-weight:700;color:#1e293b;">총 ${totalQty.toLocaleString()}건</span>
+      </div>
+      <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;">
+          <thead><tr style="background:#fafafa;border-bottom:1px solid #e2e8f0;">
+            <th style="padding:7px 12px;text-align:left;font-size:11px;color:#64748b;font-weight:700;">MODEL</th>
+            <th style="padding:7px 12px;text-align:left;font-size:11px;color:#64748b;font-weight:700;">PART NO.</th>
+            <th style="padding:7px 12px;text-align:center;font-size:11px;color:#64748b;font-weight:700;">GRADE</th>
+            <th style="padding:7px 12px;text-align:right;font-size:11px;color:#64748b;font-weight:700;">QTY</th>
+          </tr></thead>
+          <tbody>${rows_html}</tbody>
+          <tfoot><tr style="background:#f1f5f9;border-top:2px solid #e2e8f0;">
+            <td colspan="3" style="padding:7px 12px;font-size:13px;font-weight:700;color:#374151;">합계</td>
+            <td style="padding:7px 12px;text-align:right;font-size:15px;font-weight:800;color:#0d2e5c;">${totalQty.toLocaleString()}</td>
+          </tr></tfoot>
+        </table>
+      </div>
+    </div>`;
+  }).join('');
+  const wrap=document.getElementById('invoiceSummaryWrap');
+  wrap.style.display='';
+  wrap.innerHTML=`<div style="padding:4px 0 8px;font-size:12px;font-weight:600;color:#64748b;">📋 인보이스 요약 (${Object.keys(invoiceMap).length}건)</div>${cards}`;
+}
+
+// ── 검색 기준 변경 시 UI 업데이트 ──
+function onSearchFieldChange(){
+  const f=document.getElementById('searchField').value;
+  const labels={SHIPPING_NO:'시리얼 번호 입력',INVOICE_NO:'Invoice No 입력',MODEL_NO:'Model No 입력',PART_NO:'Part No. 입력',FINAL_GRADE:'Grade 입력 (A/B/Z/N/P)',CARTON_NO:'Carton No 입력'};
+  const placeholders={SHIPPING_NO:'675516P5RQZZZS0100\n675526G3HMZZZS0100\n\n한 줄에 하나씩 또는 쉼표 구분',INVOICE_NO:'X511085263\nX511085264\n\n한 줄에 하나씩 또는 쉼표 구분',MODEL_NO:'P238HVN01-0/C2\nP320HVN02.3',PART_NO:'91.23P08.0C2\n97.32P06.300',FINAL_GRADE:'N\nZ\nA',CARTON_NO:''};
+  const hints={SHIPPING_NO:'줄바꿈·쉼표로 여러 개 입력 · 바코드 리더 연속 스캔 지원',INVOICE_NO:'Invoice No 입력 시 모델·파트·등급별 수량 요약 표시',MODEL_NO:'모델명으로 해당 모델의 전체 데이터 조회',PART_NO:'Part No.로 해당 부품의 전체 데이터 조회',FINAL_GRADE:'Grade로 필터링 (A/B/Z/N/P)',CARTON_NO:'Carton No로 조회'};
+  document.getElementById('inputLabel').textContent=labels[f]||f;
+  document.getElementById('snInput').placeholder=placeholders[f]||`${f} 값 입력`;
+  document.getElementById('searchHint').textContent=hints[f]||'';
+  const isSN=f==='SHIPPING_NO';
+  document.getElementById('barcodeBtn').style.display=isSN?'':'none';
+  if(!isSN&&barcodeMode){toggleBarcode();}
+}
+
 function clearSearch(){
   document.getElementById('snInput').value='';
   document.getElementById('snTagsWrap').style.display='none';
+  document.getElementById('invoiceSummaryWrap').style.display='none';
   document.getElementById('resultCount').textContent='-';
   document.getElementById('notFoundStat').style.display='none';
   document.getElementById('downloadBtn').disabled=true;
