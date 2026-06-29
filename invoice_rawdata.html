@@ -8,14 +8,16 @@
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f0f4f8;color:#1e293b;min-height:100vh;}
-.nav{background:#0f172a;display:flex;align-items:center;position:sticky;top:0;z-index:200;}
-.nav-logo{padding:0 20px;color:#fff;font-size:14px;font-weight:700;border-right:1px solid #1e293b;height:48px;display:flex;align-items:center;gap:8px;white-space:nowrap;}
-.nav-logo small{font-size:11px;font-weight:400;color:#64748b;}
+.nav{background:#0d2e5c;display:flex;align-items:center;position:sticky;top:0;z-index:200;}
+.nav-logo-img{height:28px;margin:0 8px 0 16px;display:flex;align-items:center;}
+.nav-logo-img img{height:28px;width:auto;object-fit:contain;filter:brightness(0) invert(1);}
+.nav-logo{padding:0 20px 0 8px;color:#fff;font-size:14px;font-weight:700;border-right:1px solid rgba(255,255,255,.15);height:48px;display:flex;align-items:center;gap:8px;white-space:nowrap;}
+.nav-logo small{font-size:11px;font-weight:400;color:rgba(255,255,255,.5);}
 .nav-tabs{display:flex;}
-.nav-tab{padding:0 20px;height:48px;display:flex;align-items:center;font-size:13px;font-weight:500;color:#94a3b8;cursor:pointer;border-bottom:2px solid transparent;transition:all .15s;white-space:nowrap;}
-.nav-tab:hover{color:#e2e8f0;}.nav-tab.active{color:#fff;border-bottom-color:#3b82f6;}
+.nav-tab{padding:0 20px;height:48px;display:flex;align-items:center;font-size:13px;font-weight:500;color:rgba(255,255,255,.55);cursor:pointer;border-bottom:2px solid transparent;transition:all .15s;white-space:nowrap;}
+.nav-tab:hover{color:#fff;}.nav-tab.active{color:#fff;border-bottom-color:#c41e1e;}
 .nav-right{margin-left:auto;padding:0 16px;display:flex;align-items:center;gap:10px;}
-.db-badge{font-size:11px;background:#1e3a5f;color:#93c5fd;border-radius:20px;padding:3px 10px;font-weight:600;white-space:nowrap;}
+.db-badge{font-size:11px;background:rgba(255,255,255,.12);color:#e2e8f0;border-radius:20px;padding:3px 10px;font-weight:600;white-space:nowrap;border:1px solid rgba(255,255,255,.2);}
 .status-bar{padding:8px 20px;display:flex;align-items:center;gap:10px;font-size:12px;border-bottom:1px solid #e2e8f0;flex-wrap:wrap;}
 .status-bar.ok{background:#f0fdf4;color:#166534;}
 .status-bar.loading{background:#fffbeb;color:#92400e;}
@@ -124,6 +126,14 @@ tr:hover td{background:#f8fafc;}
 </head>
 <body>
 <nav class="nav">
+  <div class="nav-logo-img">
+    <svg width="90" height="28" viewBox="0 0 90 28" xmlns="http://www.w3.org/2000/svg">
+      <rect width="90" height="28" rx="4" fill="transparent"/>
+      <text x="2" y="20" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="15" font-weight="800" fill="#ffffff" letter-spacing="0.5">Jung</text>
+      <text x="46" y="20" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="15" font-weight="800" fill="#c41e1e" letter-spacing="0.5">Lim</text>
+      <text x="2" y="27" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="6.5" font-weight="400" fill="rgba(255,255,255,0.55)" letter-spacing="1.2">ELECTRONICS</text>
+    </svg>
+  </div>
   <div class="nav-logo">🖥 LCD QC <small>인보이스 S/N 관리</small></div>
   <div class="nav-tabs">
     <div class="nav-tab active" onclick="showPage('p1',this)">🔍 S/N 검색</div>
@@ -288,7 +298,7 @@ tr:hover td{background:#f8fafc;}
 
 <script>
 const GH_OWNER='junglim940428-png', GH_REPO='invoicerawdata', GH_BRANCH='main';
-const HTML_UPDATED='2026-06-29';
+const HTML_UPDATED='2026-06-29 08:30:00 UTC';
 let db=[],headers=[],lastResults=[],barcodeMode=false,barcodeTimer=null,sortCol=-1,sortAsc=true;
 let uploadFileBuffer=null,uploadFileName=null,htmlFileContent=null;
 
@@ -512,32 +522,6 @@ function onFileSelected(file){
         <td style="color:#94a3b8">${g.sheet}</td></tr>`;
     }).join('');
 
-    // ── 피벗 ──
-    function makePivot(rowKey,colKey,title){
-      if(!rowKey||!colKey)return'';
-      const rowVals=[...new Set(rows.map(r=>String(r[rowKey]||'')))].filter(Boolean).sort();
-      const colVals=[...new Set(rows.map(r=>String(r[colKey]||'')))].filter(Boolean).sort();
-      const data={};
-      rows.forEach(r=>{
-        const rv=String(r[rowKey]||''),cv=String(r[colKey]||'');
-        if(!data[rv])data[rv]={};data[rv][cv]=(data[rv][cv]||0)+1;
-      });
-      const totC={};colVals.forEach(cv=>{totC[cv]=rowVals.reduce((s,rv)=>s+(data[rv]?.[cv]||0),0);});
-      const grand=rowVals.reduce((s,rv)=>s+colVals.reduce((s2,cv)=>s2+(data[rv]?.[cv]||0),0),0);
-      const gradeHeaderColor={'A':'#15803d','B':'#b45309','Z':'#4b5563','N':'#1d4ed8','P':'#6d28d9'};
-      const thead=`<tr style="background:#fafafa;border-bottom:2px solid #e2e8f0"><th style="padding:7px 14px;font-size:12px;color:#64748b;font-weight:700;border-bottom:2px solid #e2e8f0;text-align:left;white-space:nowrap">${rowKey}</th>${colVals.map(cv=>`<th style="padding:7px 14px;text-align:center;font-size:13px;font-weight:700;border-bottom:2px solid #e2e8f0;color:${gradeHeaderColor[cv]||'#374151'};min-width:60px">${cv}</th>`).join('')}<th style="padding:7px 14px;text-align:center;font-size:12px;font-weight:700;border-bottom:2px solid #e2e8f0;color:#374151;min-width:55px;background:#f1f5f9">합계</th></tr>`;
-      const tbody=rowVals.map((rv,ri)=>{
-        const rt=colVals.reduce((s,cv)=>s+(data[rv]?.[cv]||0),0);
-        const bg=ri%2===0?'#fff':'#f8fafc';
-        return`<tr style="background:${bg}"><td style="padding:6px 14px;font-size:14px;font-weight:600;color:#0f172a;white-space:nowrap;border-bottom:1px solid #f1f5f9">${rv}</td>${colVals.map(cv=>{const v=data[rv]?.[cv]||0;return`<td style="padding:6px 14px;text-align:center;font-size:14px;color:${v?gradeHeaderColor[cv]||'#334155':'#d1d5db'};font-weight:${v?700:400};border-bottom:1px solid #f1f5f9">${v||'·'}</td>`;}).join('')}<td style="padding:6px 14px;text-align:center;font-size:14px;font-weight:800;color:#1e293b;background:#f1f5f9;border-bottom:1px solid #e2e8f0">${rt}</td></tr>`;
-      }).join('');
-      const tfoot=`<tr style="background:#f1f5f9;border-top:2px solid #e2e8f0"><td style="padding:7px 14px;font-size:13px;font-weight:700;color:#374151">합계</td>${colVals.map(cv=>`<td style="padding:7px 14px;text-align:center;font-size:14px;font-weight:800;color:${gradeHeaderColor[cv]||'#374151'}">${totC[cv]||0}</td>`).join('')}<td style="padding:7px 14px;text-align:center;font-size:15px;font-weight:800;color:#0f172a">${grand}</td></tr>`;
-      return`<div style="margin-bottom:0"><div style="font-size:13px;font-weight:700;color:#374151;margin-bottom:8px;display:flex;align-items:center;gap:6px">📊 <span>${title}</span></div><div style="overflow-x:auto;border-radius:8px;border:1px solid #e2e8f0;box-shadow:0 1px 3px rgba(0,0,0,.06)"><table style="width:auto;min-width:100%;border-collapse:collapse"><thead>${thead}</thead><tbody>${tbody}</tbody><tfoot>${tfoot}</tfoot></table></div></div>`;
-    }
-    const p1=makePivot(colInv,colGrade,'인보이스 × 등급');
-    const p2=makePivot(colModel,colGrade,'모델 × 등급');
-    const p3=makePivot(colInv,colModel,'인보이스 × 모델');
-
     document.getElementById('previewContent').innerHTML=`
       <div style="padding:0 0 4px 0">
         <div style="padding:10px 20px 8px;font-size:13px;font-weight:700;color:#374151;border-bottom:1px solid #f1f5f9">
@@ -554,10 +538,6 @@ function onFileSelected(file){
             </tr></tfoot>
           </table>
         </div>
-      </div>
-      <div style="padding:16px;display:flex;flex-direction:column;gap:16px">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">${p1}${p2}</div>
-        ${p3}
       </div>`;
     document.getElementById('previewCard').style.display='';
     hideUploadMessages();
