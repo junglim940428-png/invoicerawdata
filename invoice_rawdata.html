@@ -100,8 +100,8 @@ tr:hover td{background:#f8fafc;}
 .pat-saved{font-size:11px;color:#16a34a;font-weight:600;}
 .preview-info{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px;}
 .pi-card{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 16px;min-width:100px;}
-.pi-card .pi-l{font-size:10px;color:#94a3b8;font-weight:600;text-transform:uppercase;}
-.pi-card .pi-v{font-size:18px;font-weight:800;color:#1e293b;margin-top:2px;}
+.pi-card .pi-l{font-size:12px;color:#64748b;font-weight:600;text-transform:uppercase;}
+.pi-card .pi-v{font-size:26px;font-weight:800;color:#1e293b;margin-top:4px;}
 .pi-card .pi-v.blue{color:#3b82f6;}.pi-card .pi-v.orange{color:#ea580c;}
 .upload-progress{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:14px 18px;display:none;margin-bottom:14px;}
 .upload-progress.show{display:block;}
@@ -114,8 +114,8 @@ tr:hover td{background:#f8fafc;}
 /* 크로스체크 테이블 */
 .cross-table{width:100%;border-collapse:collapse;font-size:14px;}
 .cross-table thead tr{background:#1e293b;}
-.cross-table th{padding:7px 12px;text-align:left;font-size:13px;font-weight:700;color:#e2e8f0;white-space:nowrap;}
-.cross-table td{padding:6px 12px;border-bottom:1px solid #f1f5f9;white-space:nowrap;}
+.cross-table th{padding:7px 12px;text-align:center;font-size:13px;font-weight:700;color:#e2e8f0;white-space:nowrap;}
+.cross-table td{padding:6px 12px;border-bottom:1px solid #f1f5f9;white-space:nowrap;text-align:center;}
 .cross-table tr:hover td{background:#f8fafc;}
 .cross-table .grade-badge{display:inline-block;padding:1px 8px;border-radius:4px;font-size:13px;font-weight:700;}
 #toast{position:fixed;bottom:24px;right:24px;background:#0f172a;color:#fff;border-radius:10px;padding:12px 18px;font-size:13px;z-index:999;opacity:0;transform:translateY(10px);transition:all .3s;pointer-events:none;max-width:320px;}
@@ -467,7 +467,7 @@ function onFileSelected(file){
     const existingKeys=new Set(db.map(r=>String(r[snKey]||'')));
     let dupCount=0;
     rows.forEach(r=>{if(existingKeys.has(String(r[snKey]||'')))dupCount++;});
-    const sheetBadges=sheetSummary.map(s=>`<span style="display:inline-block;padding:1px 7px;border-radius:10px;font-size:11px;font-weight:600;background:#eff6ff;color:#1d4ed8;margin-right:4px;">📋 ${s.name}: ${s.count}건</span>`).join('');
+    const sheetBadges=sheetSummary.map(s=>`<span style="display:inline-block;padding:5px 14px;border-radius:10px;font-size:15px;font-weight:600;background:#eff6ff;color:#1d4ed8;margin-right:8px;">📋 ${s.name}: ${s.count}건</span>`).join('');
     document.getElementById('previewInfo').innerHTML=`
       <div class="pi-card"><div class="pi-l">총 행 수</div><div class="pi-v blue">${rows.length.toLocaleString()}</div></div>
       <div class="pi-card"><div class="pi-l">시트 수</div><div class="pi-v">${sheetSummary.length}</div></div>
@@ -507,7 +507,7 @@ function onFileSelected(file){
         <td>${g.model}</td>
         <td style="font-family:monospace">${g.part}</td>
         <td><span class="grade-badge" style="background:${gradeBg};color:${gc}">${g.grade}</span></td>
-        <td style="text-align:right;font-weight:700;color:#1e293b">${g.qty.toLocaleString()}</td>
+        <td style="font-weight:700;color:#1e293b">${g.qty.toLocaleString()}</td>
         <td style="color:#94a3b8">${g.sheet}</td></tr>`;
     }).join('');
 
@@ -547,8 +547,8 @@ function onFileSelected(file){
             <thead><tr><th>Ship Date</th><th>Invoice No</th><th>Model</th><th>Part No.</th><th>Grade</th><th style="text-align:right">Qty</th><th>Sheet</th></tr></thead>
             <tbody>${crossRows}</tbody>
             <tfoot><tr style="background:#f1f5f9;border-top:2px solid #e2e8f0;font-weight:700">
-              <td colspan="5" style="padding:7px 12px;font-size:14px">합계</td>
-              <td style="padding:7px 12px;text-align:right;font-size:15px;font-weight:800">${totalQty.toLocaleString()}</td>
+              <td colspan="5" style="padding:7px 12px;font-size:14px;text-align:center">합계</td>
+              <td style="padding:7px 12px;font-size:15px;font-weight:800;text-align:center">${totalQty.toLocaleString()}</td>
               <td></td>
             </tr></tfoot>
           </table>
