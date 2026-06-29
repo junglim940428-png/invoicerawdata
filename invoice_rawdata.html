@@ -458,17 +458,27 @@ function formatDate(raw){
 }
 
 // ── xlsx 파일 선택 & 미리보기 (전체 시트) ──
+const PREVIEW_SAMPLE=200; // 대용량 파일 미리보기 샘플 행 수
 function onFileSelected(file){
   if(!file)return;
   if(!/\.(xlsx|xls)$/i.test(file.name)){showToast('xlsx 또는 xls 파일만 지원합니다.');return;}
   uploadFileName=file.name;
+  const fileSizeMB=(file.size/1024/1024).toFixed(1);
+  const isLarge=file.size>3*1024*1024; // 3MB 이상 대용량
   document.getElementById('selectedFileName').style.display='';
   document.getElementById('selectedFileName').innerHTML=`📄 선택된 파일: <strong>${file.name}</strong> (${(file.size/1024).toFixed(1)} KB)`;
+  // 대용량이면 즉시 로딩 표시
+  if(isLarge){
+    document.getElementById('previewInfo').innerHTML=`<div style="padding:10px 0;font-size:13px;color:#3b82f6;font-weight:600;">⏳ 대용량 파일(${fileSizeMB}MB) 분석 중... 잠시 기다려주세요.</div>`;
+    document.getElementById('previewContent').innerHTML='';
+  }
   const reader=new FileReader();
   reader.onload=function(e){
     uploadFileBuffer=e.target.result;
+    // UI 업데이트 후 처리 시작 (렌더링 우선)
+    setTimeout(function(){
     const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});
-    // ── 전체 시트 읽기 ──
+    // ── 전체 시트 읽기 (미리보기는 샘플, 업로드는 전체 파일 그대로) ──
     let allRows=[],allHdrs=[],sheetSummary=[];
     wb.SheetNames.forEach(sheetName=>{
       const ws=wb.Sheets[sheetName];
@@ -477,26 +487,33 @@ function onFileSelected(file){
       const hdrs=rawRows[0].map(h=>String(h).trim()).filter(Boolean);
       if(!hdrs.length)return;
       if(!allHdrs.length)allHdrs=hdrs;
-      const rows=rawRows.slice(1).filter(r=>r.some(v=>v!=='')).map(r=>{
+      const totalCount=rawRows.length-1;
+      // 미리보기용: 대용량은 샘플만, 소용량은 전체
+      const previewData=isLarge?rawRows.slice(1,PREVIEW_SAMPLE+1):rawRows.slice(1);
+      const rows=previewData.filter(r=>r.some(v=>v!=='')).map(r=>{
         const obj={__sheet__:sheetName};
         hdrs.forEach((h,i)=>{obj[h]=r[i]!==undefined?String(r[i]):'';});
         return obj;
       });
       allRows.push(...rows);
-      sheetSummary.push({name:sheetName,count:rows.length});
+      sheetSummary.push({name:sheetName,count:totalCount,preview:rows.length});
     });
     const hdrs=allHdrs,rows=allRows;
     const snKey=hdrs.find(h=>h==='SHIPPING_NO')||hdrs[0]||'';
     const existingKeys=new Set(db.map(r=>String(r[snKey]||'')));
     let dupCount=0;
     rows.forEach(r=>{if(existingKeys.has(String(r[snKey]||'')))dupCount++;});
-    const sheetBadges=sheetSummary.map(s=>`<span style="display:inline-block;padding:5px 14px;border-radius:10px;font-size:15px;font-weight:600;background:#eff6ff;color:#1d4ed8;margin-right:8px;">📋 ${s.name}: ${s.count}건</span>`).join('');
+    const totalAllRows=sheetSummary.reduce((s,x)=>s+x.count,0);
+    const sheetBadges=sheetSummary.map(s=>`<span style="display:inline-block;padding:5px 14px;border-radius:10px;font-size:15px;font-weight:600;background:#eff6ff;color:#1d4ed8;margin-right:8px;">📋 ${s.name}: ${s.count.toLocaleString()}건</span>`).join('');
+    const sampleNote=isLarge?`<div style="font-size:11px;color:#ea580c;font-weight:600;margin-top:6px;">⚠ 대용량 파일: 요약표는 앞 ${PREVIEW_SAMPLE}행 샘플 기준 · 전체 ${totalAllRows.toLocaleString()}행은 GitHub에 그대로 업로드됩니다</div>`:'';
     document.getElementById('previewInfo').innerHTML=`
-      <div class="pi-card"><div class="pi-l">총 행 수</div><div class="pi-v blue">${rows.length.toLocaleString()}</div></div>
+      <div class="pi-card"><div class="pi-l">전체 행 수</div><div class="pi-v blue">${totalAllRows.toLocaleString()}</div></div>
       <div class="pi-card"><div class="pi-l">시트 수</div><div class="pi-v">${sheetSummary.length}</div></div>
       <div class="pi-card"><div class="pi-l">기존 DB 중복</div><div class="pi-v orange">${dupCount.toLocaleString()}</div></div>
-      <div class="pi-card"><div class="pi-l">신규 추가 예상</div><div class="pi-v blue">${(rows.length-dupCount).toLocaleString()}</div></div>
-      <div style="width:100%;font-size:11px;color:#64748b;margin-top:-4px;">${sheetBadges}</div>`;
+      <div class="pi-card"><div class="pi-l">신규 추가 예상</div><div class="pi-v blue">${(totalAllRows-dupCount).toLocaleString()}</div></div>
+      <div style="width:100%;font-size:11px;color:#64748b;margin-top:-4px;">${sheetBadges}</div>
+      ${sampleNote}
+      `;
 
     const find=(...keys)=>hdrs.find(h=>keys.some(k=>h.toUpperCase().includes(k.toUpperCase())))||null;
     const colDate =find('SHIPPING_TIME','SHIP DATE','SHIP_DATE');
@@ -553,6 +570,7 @@ function onFileSelected(file){
       </div>`;
     document.getElementById('previewCard').style.display='';
     hideUploadMessages();
+    },50); // setTimeout 끝 — UI가 "처리 중..." 렌더링 후 실행
   };
   reader.readAsArrayBuffer(file);
 }
