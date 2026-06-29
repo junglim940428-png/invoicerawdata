@@ -205,7 +205,7 @@ tr:hover td{background:#f8fafc;}
       <span class="result-stat">검색 결과: <strong id="resultCount">-</strong></span>
       <span class="result-stat warn" id="notFoundStat" style="display:none">미조회: <strong id="notFoundCount">0</strong>건</span>
       <div class="result-bar-right">
-        <button class="btn btn-dark" id="downloadBtn" onclick="downloadResult()" disabled>⬇ 엑셀 다운로드</button>
+        <button class="btn btn-dark" id="downloadBtn" onclick="downloadResult()" disabled>⬇ xlsx 다운로드</button>
       </div>
     </div>
     <div class="table-scroll">
@@ -312,7 +312,7 @@ tr:hover td{background:#f8fafc;}
 
 <script>
 const GH_OWNER='junglim940428-png', GH_REPO='invoicerawdata', GH_BRANCH='main';
-const HTML_UPDATED='2026-06-29 08:41:39 UTC';
+const HTML_UPDATED='2026-06-29 08:47:36 UTC';
 function toKST(utcStr){
   if(!utcStr||utcStr==='-')return utcStr;
   const s=utcStr.replace(/ UTC$/,'').trim();
@@ -531,18 +531,57 @@ document.getElementById('snInput').addEventListener('keydown',function(e){
   },150);}
 });
 
-// ── 다운로드 ──
+// ── 다운로드 (XLSX · ExcelJS) ──
 function downloadResult(){
   if(!lastResults.length){showToast('다운로드할 데이터가 없습니다.');return;}
-  const bom='﻿',hdr=headers.join(',');
-  const body=lastResults.map(r=>headers.map(h=>`"${String(r[h]||'').replace(/"/g,'""')}"`).join(','));
-  const csv=bom+[hdr,...body].join('\n');
-  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+  const btn=document.getElementById('downloadBtn');
+  btn.disabled=true;btn.textContent='⏳ 생성 중...';
+  const go=()=>buildAndDownloadXlsx().finally(()=>{btn.disabled=false;btn.textContent='⬇ xlsx 다운로드';});
+  if(!window.ExcelJS){
+    const s=document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js';
+    s.onload=go;s.onerror=()=>{showToast('⚠ ExcelJS 로드 실패. 인터넷을 확인하세요.');btn.disabled=false;btn.textContent='⬇ xlsx 다운로드';};
+    document.head.appendChild(s);
+  }else{go();}
+}
+async function buildAndDownloadXlsx(){
+  const displayHeaders=headers.filter(h=>h!=='__sheet__'&&h!=='__file__');
+  const wb=new ExcelJS.Workbook();
+  const ws=wb.addWorksheet('검색결과');
+  // 컬럼 너비 — 헤더+데이터 최대 길이 기준
+  const colWidths=displayHeaders.map(h=>h.length);
+  lastResults.forEach(r=>displayHeaders.forEach((h,i)=>{const l=String(r[h]||'').length;if(l>colWidths[i])colWidths[i]=l;}));
+  ws.columns=displayHeaders.map((h,i)=>({header:h,key:h,width:Math.min(Math.max(colWidths[i]+2,10),40)}));
+  // 헤더 스타일 (네이비 배경 · 흰 글씨 · 가운데 정렬)
+  ws.getRow(1).eachCell(cell=>{
+    cell.font={bold:true,color:{argb:'FFFFFFFF'},size:11};
+    cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF0D2E5C'}};
+    cell.alignment={horizontal:'center',vertical:'middle',wrapText:false};
+    cell.border={bottom:{style:'thin',color:{argb:'FFE2E8F0'}}};
+  });
+  ws.getRow(1).height=22;
+  // 데이터 행
+  lastResults.forEach((r,idx)=>{
+    const rowData={};
+    displayHeaders.forEach(h=>{rowData[h]=r[h]!==undefined?String(r[h]):'';});
+    const row=ws.addRow(rowData);
+    const isEven=idx%2===0;
+    row.eachCell(cell=>{
+      cell.alignment={horizontal:'center',vertical:'middle',wrapText:false};
+      if(isEven)cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFF8FAFC'}};
+      cell.border={bottom:{style:'hair',color:{argb:'FFE2E8F0'}}};
+    });
+  });
+  // 합계 행 (있을 때)
+  ws.views=[{state:'frozen',ySplit:1}]; // 헤더 고정
+  const fname=`SN_결과_${new Date().toISOString().slice(0,10)}.xlsx`;
+  const buf=await wb.xlsx.writeBuffer();
+  const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');
-  a.href=url;a.download=`SN_결과_${new Date().toISOString().slice(0,10)}.csv`;a.click();
+  a.href=url;a.download=fname;a.click();
   URL.revokeObjectURL(url);
-  showToast(`⬇ ${lastResults.length.toLocaleString()}건 다운로드 완료`);
+  showToast(`⬇ ${lastResults.length.toLocaleString()}건 xlsx 다운로드 완료`);
 }
 
 // ── 날짜 형식 변환 (YYYY/MM/DD) ──
