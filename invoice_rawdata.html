@@ -458,18 +458,18 @@ function formatDate(raw){
 }
 
 // ── xlsx 파일 선택 & 미리보기 (전체 시트) ──
-const PREVIEW_SAMPLE=200; // 대용량 파일 미리보기 샘플 행 수
+const LARGE_FILE_MB=3; // 대용량 기준 (MB)
 function onFileSelected(file){
   if(!file)return;
   if(!/\.(xlsx|xls)$/i.test(file.name)){showToast('xlsx 또는 xls 파일만 지원합니다.');return;}
   uploadFileName=file.name;
   const fileSizeMB=(file.size/1024/1024).toFixed(1);
-  const isLarge=file.size>3*1024*1024; // 3MB 이상 대용량
+  const isLarge=file.size>LARGE_FILE_MB*1024*1024; // 대용량 여부
   document.getElementById('selectedFileName').style.display='';
   document.getElementById('selectedFileName').innerHTML=`📄 선택된 파일: <strong>${file.name}</strong> (${(file.size/1024).toFixed(1)} KB)`;
   // 대용량이면 즉시 로딩 표시
   if(isLarge){
-    document.getElementById('previewInfo').innerHTML=`<div style="padding:10px 0;font-size:13px;color:#3b82f6;font-weight:600;">⏳ 대용량 파일(${fileSizeMB}MB) 분석 중... 잠시 기다려주세요.</div>`;
+    document.getElementById('previewInfo').innerHTML=`<div style="padding:10px 0;font-size:13px;color:#3b82f6;font-weight:600;">⏳ 대용량 파일(${fileSizeMB}MB) 전체 분석 중... 잠시 기다려주세요 (수십 초 소요될 수 있습니다)</div>`;
     document.getElementById('previewContent').innerHTML='';
   }
   const reader=new FileReader();
@@ -488,9 +488,8 @@ function onFileSelected(file){
       if(!hdrs.length)return;
       if(!allHdrs.length)allHdrs=hdrs;
       const totalCount=rawRows.length-1;
-      // 미리보기용: 대용량은 샘플만, 소용량은 전체
-      const previewData=isLarge?rawRows.slice(1,PREVIEW_SAMPLE+1):rawRows.slice(1);
-      const rows=previewData.filter(r=>r.some(v=>v!=='')).map(r=>{
+      // 전체 행 읽기 (대용량도 동일)
+      const rows=rawRows.slice(1).filter(r=>r.some(v=>v!=='')).map(r=>{
         const obj={__sheet__:sheetName};
         hdrs.forEach((h,i)=>{obj[h]=r[i]!==undefined?String(r[i]):'';});
         return obj;
@@ -505,7 +504,7 @@ function onFileSelected(file){
     rows.forEach(r=>{if(existingKeys.has(String(r[snKey]||'')))dupCount++;});
     const totalAllRows=sheetSummary.reduce((s,x)=>s+x.count,0);
     const sheetBadges=sheetSummary.map(s=>`<span style="display:inline-block;padding:5px 14px;border-radius:10px;font-size:15px;font-weight:600;background:#eff6ff;color:#1d4ed8;margin-right:8px;">📋 ${s.name}: ${s.count.toLocaleString()}건</span>`).join('');
-    const sampleNote=isLarge?`<div style="font-size:11px;color:#ea580c;font-weight:600;margin-top:6px;">⚠ 대용량 파일: 요약표는 앞 ${PREVIEW_SAMPLE}행 샘플 기준 · 전체 ${totalAllRows.toLocaleString()}행은 GitHub에 그대로 업로드됩니다</div>`:'';
+    const sampleNote=isLarge?`<div style="font-size:11px;color:#3b82f6;font-weight:600;margin-top:6px;">ℹ 대용량 파일: 전체 ${totalAllRows.toLocaleString()}행 분석 완료 · 요약표는 그룹핑된 결과입니다</div>`:'';
     document.getElementById('previewInfo').innerHTML=`
       <div class="pi-card"><div class="pi-l">전체 행 수</div><div class="pi-v blue">${totalAllRows.toLocaleString()}</div></div>
       <div class="pi-card"><div class="pi-l">시트 수</div><div class="pi-v">${sheetSummary.length}</div></div>
