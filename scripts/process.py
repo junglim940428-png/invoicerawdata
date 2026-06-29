@@ -15,15 +15,34 @@ SN_KEY   = 'SHIPPING_NO'
 
 
 def read_xlsx(path):
+    """모든 시트를 읽어서 행 합산"""
     wb = openpyxl.load_workbook(path, data_only=True)
-    ws = wb.active
-    rows_iter = ws.iter_rows(values_only=True)
-    headers = [str(v or '').strip() for v in next(rows_iter)]
-    rows = []
-    for row in rows_iter:
-        if any(v is not None for v in row):
-            rows.append({headers[i]: str(row[i] if row[i] is not None else '') for i in range(len(headers))})
-    return headers, rows
+    all_rows = []
+    headers = []
+
+    for ws in wb.worksheets:
+        rows_iter = ws.iter_rows(values_only=True)
+        try:
+            first_row = next(rows_iter)
+        except StopIteration:
+            continue  # 빈 시트 건너뜀
+
+        sheet_headers = [str(v or '').strip() for v in first_row]
+        # 헤더가 모두 비어있으면 건너뜀
+        if not any(sheet_headers):
+            continue
+
+        # 첫 번째 유효 시트의 헤더를 사용
+        if not headers:
+            headers = sheet_headers
+
+        for row in rows_iter:
+            if any(v is not None for v in row):
+                obj = {sheet_headers[i]: str(row[i] if row[i] is not None else '') for i in range(len(sheet_headers))}
+                obj['__sheet__'] = ws.title  # 시트 이름 추가
+                all_rows.append(obj)
+
+    return headers, all_rows
 
 
 def read_csv(path):
@@ -88,6 +107,10 @@ def main():
                     seen_keys.add(dup_key)
                 all_rows.append(row)
                 added += 1
+
+            # __sheet__ 컬럼을 헤더에 추가
+            if '__sheet__' not in headers and any('__sheet__' in r for r in rows):
+                headers = headers + ['__sheet__']
 
             file_stats.append({'file': filename, 'added': added, 'total': len(rows)})
             print(f"✅ {filename}: {added}건 추가 ({len(rows) - added}건 중복 제거)")
