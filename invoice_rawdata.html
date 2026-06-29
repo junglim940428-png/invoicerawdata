@@ -105,13 +105,13 @@ tr:hover td{background:#f8fafc;}
 .ue-title{font-size:13px;font-weight:600;color:#991b1b;margin-bottom:6px;}
 .ue-msg{font-size:12px;color:#b91c1c;line-height:1.7;}
 /* 크로스체크 테이블 */
-.cross-table{width:100%;border-collapse:collapse;font-size:12px;}
+.cross-table{width:100%;border-collapse:collapse;font-size:14px;}
 .cross-table thead tr{background:#1e293b;}
-.cross-table th{padding:9px 14px;text-align:left;font-size:11px;font-weight:700;color:#e2e8f0;white-space:nowrap;}
-.cross-table td{padding:8px 14px;border-bottom:1px solid #f1f5f9;white-space:nowrap;}
+.cross-table th{padding:7px 12px;text-align:left;font-size:13px;font-weight:700;color:#e2e8f0;white-space:nowrap;}
+.cross-table td{padding:6px 12px;border-bottom:1px solid #f1f5f9;white-space:nowrap;}
 .cross-table tr:hover td{background:#f8fafc;}
-.cross-table .grade-badge{display:inline-block;padding:1px 8px;border-radius:4px;font-size:11px;font-weight:700;}
-.cross-table .sheet-badge{display:inline-block;padding:1px 7px;border-radius:10px;font-size:10px;font-weight:600;background:#eff6ff;color:#1d4ed8;margin-right:4px;}
+.cross-table .grade-badge{display:inline-block;padding:1px 8px;border-radius:4px;font-size:13px;font-weight:700;}
+.cross-table .sheet-badge{display:inline-block;padding:1px 7px;border-radius:10px;font-size:12px;font-weight:600;background:#eff6ff;color:#1d4ed8;margin-right:4px;}
 #toast{position:fixed;bottom:24px;right:24px;background:#0f172a;color:#fff;border-radius:10px;padding:12px 18px;font-size:13px;z-index:999;opacity:0;transform:translateY(10px);transition:all .3s;pointer-events:none;max-width:320px;}
 #toast.show{opacity:1;transform:translateY(0);}
 </style>
@@ -478,11 +478,19 @@ function onFileSelected(file){
       let dateStr=dateRaw;
       if(/^\d{5}$/.test(dateRaw)){
         const d=new Date(Math.round((parseInt(dateRaw)-25569)*86400*1000));
-        dateStr=d.toISOString().slice(0,10);
+        const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),day=String(d.getDate()).padStart(2,'0');
+        dateStr=`${y}/${m}/${day}`;
       } else if(dateRaw.includes('T')){
-        dateStr=dateRaw.slice(0,10);
+        const p=dateRaw.slice(0,10).split('-');
+        dateStr=`${p[0]}/${p[1]}/${p[2]}`;
+      } else if(/^\d{4}-\d{2}-\d{2}/.test(dateRaw)){
+        dateStr=dateRaw.slice(0,10).replace(/-/g,'/');
+      } else if(/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(dateRaw)){
+        // M/D/YYYY → YYYY/MM/DD
+        const p=dateRaw.split('/');
+        dateStr=`${p[2]}/${p[0].padStart(2,'0')}/${p[1].padStart(2,'0')}`;
       } else if(dateRaw.length>10){
-        dateStr=dateRaw.slice(0,10);
+        dateStr=dateRaw.slice(0,10).replace(/-/g,'/');
       }
       const inv  =colInv?String(r[colInv]||''):'-';
       const model=colModel?String(r[colModel]||''):'-';
@@ -504,10 +512,10 @@ function onFileSelected(file){
         <td>${g.dateStr}</td>
         <td style="font-weight:600">${g.inv}</td>
         <td>${g.model}</td>
-        <td style="font-family:monospace;font-size:11px">${g.part}</td>
+        <td style="font-family:monospace">${g.part}</td>
         <td><span class="grade-badge" style="background:${gradeBg};color:${gc}">${g.grade}</span></td>
         <td style="text-align:right;font-weight:700;color:#1e293b">${g.qty.toLocaleString()}</td>
-        <td style="font-size:11px;color:#94a3b8">${g.sheet}</td>
+        <td style="color:#94a3b8">${g.sheet}</td>
       </tr>`;
     }).join('');
 
@@ -526,13 +534,13 @@ function onFileSelected(file){
       });
       const totC={};colVals.forEach(cv=>{totC[cv]=rowVals.reduce((s,rv)=>s+(data[rv]?.[cv]||0),0);});
       const grand=rowVals.reduce((s,rv)=>s+colVals.reduce((s2,cv)=>s2+(data[rv]?.[cv]||0),0),0);
-      const thead=`<tr style="background:#f8fafc"><th style="padding:8px 12px;font-size:11px;color:#64748b;font-weight:700;border-bottom:2px solid #e2e8f0;text-align:left">${rowKey}</th>${colVals.map(cv=>`<th style="padding:8px 12px;text-align:center;font-size:11px;font-weight:700;border-bottom:2px solid #e2e8f0;color:${gradeColor[cv]||'#374151'}">${cv}</th>`).join('')}<th style="padding:8px 12px;text-align:center;font-size:11px;font-weight:700;border-bottom:2px solid #e2e8f0;background:#f1f5f9">합계</th></tr>`;
+      const thead=`<tr style="background:#f8fafc"><th style="padding:7px 12px;font-size:13px;color:#64748b;font-weight:700;border-bottom:2px solid #e2e8f0;text-align:left">${rowKey}</th>${colVals.map(cv=>`<th style="padding:7px 12px;text-align:center;font-size:13px;font-weight:700;border-bottom:2px solid #e2e8f0;color:${gradeColor[cv]||'#374151'}">${cv}</th>`).join('')}<th style="padding:7px 12px;text-align:center;font-size:13px;font-weight:700;border-bottom:2px solid #e2e8f0;background:#f1f5f9">합계</th></tr>`;
       const tbody=rowVals.map(rv=>{
         const rt=colVals.reduce((s,cv)=>s+(data[rv]?.[cv]||0),0);
-        return`<tr style="border-bottom:1px solid #f1f5f9"><td style="padding:7px 12px;font-size:12px;font-weight:600;color:#0f172a">${rv}</td>${colVals.map(cv=>{const v=data[rv]?.[cv]||0;return`<td style="padding:7px 12px;text-align:center;font-size:12px;color:${v?gradeColor[cv]||'#334155':'#cbd5e1'};font-weight:${v?700:400}">${v||'-'}</td>`;}).join('')}<td style="padding:7px 12px;text-align:center;font-size:12px;font-weight:800;background:#f8fafc">${rt}</td></tr>`;
+        return`<tr style="border-bottom:1px solid #f1f5f9"><td style="padding:6px 12px;font-size:14px;font-weight:600;color:#0f172a">${rv}</td>${colVals.map(cv=>{const v=data[rv]?.[cv]||0;return`<td style="padding:6px 12px;text-align:center;font-size:14px;color:${v?gradeColor[cv]||'#334155':'#cbd5e1'};font-weight:${v?700:400}">${v||'-'}</td>`;}).join('')}<td style="padding:6px 12px;text-align:center;font-size:14px;font-weight:800;background:#f8fafc">${rt}</td></tr>`;
       }).join('');
-      const tfoot=`<tr style="background:#f1f5f9;border-top:2px solid #e2e8f0"><td style="padding:7px 12px;font-size:12px;font-weight:700">합계</td>${colVals.map(cv=>`<td style="padding:7px 12px;text-align:center;font-size:12px;font-weight:700;color:${gradeColor[cv]||'#374151'}">${totC[cv]||0}</td>`).join('')}<td style="padding:7px 12px;text-align:center;font-size:13px;font-weight:800">${grand}</td></tr>`;
-      return`<div style="margin-bottom:20px"><div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:8px">📊 ${title}</div><div style="overflow-x:auto;border-radius:8px;border:1px solid #e2e8f0"><table style="width:100%;border-collapse:collapse"><thead>${thead}</thead><tbody>${tbody}</tbody><tfoot>${tfoot}</tfoot></table></div></div>`;
+      const tfoot=`<tr style="background:#f1f5f9;border-top:2px solid #e2e8f0"><td style="padding:6px 12px;font-size:14px;font-weight:700">합계</td>${colVals.map(cv=>`<td style="padding:6px 12px;text-align:center;font-size:14px;font-weight:700;color:${gradeColor[cv]||'#374151'}">${totC[cv]||0}</td>`).join('')}<td style="padding:6px 12px;text-align:center;font-size:15px;font-weight:800">${grand}</td></tr>`;
+      return`<div style="margin-bottom:20px"><div style="font-size:14px;font-weight:700;color:#374151;margin-bottom:8px">📊 ${title}</div><div style="overflow-x:auto;border-radius:8px;border:1px solid #e2e8f0"><table style="width:100%;border-collapse:collapse"><thead>${thead}</thead><tbody>${tbody}</tbody><tfoot>${tfoot}</tfoot></table></div></div>`;
     }
 
     const p1=makePivot(colInv,colGrade,`인보이스별 × 등급별`);
