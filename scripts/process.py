@@ -39,7 +39,7 @@ def read_xlsx(path):
         for row in rows_iter:
             if any(v is not None for v in row):
                 obj = {sheet_headers[i]: str(row[i] if row[i] is not None else '') for i in range(len(sheet_headers))}
-                obj['__sheet__'] = ws.title  # 시트 이름 추가
+                
                 all_rows.append(obj)
 
     return headers, all_rows
@@ -108,7 +108,7 @@ def main():
                 all_rows.append(row)
                 added += 1
 
-            # __sheet__ 컬럼을 헤더에 추가
+            
             if '__sheet__' not in headers and any('__sheet__' in r for r in rows):
                 headers = headers + ['__sheet__']
 
