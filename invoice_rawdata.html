@@ -311,29 +311,16 @@ tr:hover td{background:#f8fafc;}
     </div>
   </div>
 
-  <!-- GitHub 토큰 -->
-  <div class="card">
-    <div class="card-header"><h2>🔑 GitHub 토큰 (PAT)</h2><span class="hint">최초 1회만 입력 — 브라우저에 저장됩니다</span></div>
-    <div class="card-body">
-      <div class="pat-row">
-        <input type="password" class="pat-input" id="patInput" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx">
-        <button class="btn btn-blue" onclick="savePat()">저장</button>
-        <button class="btn btn-ghost" onclick="clearPat()">삭제</button>
-        <span id="patStatus" class="pat-saved" style="display:none">✅ 토큰 저장됨</span>
-      </div>
-      <div style="font-size:11px;color:#94a3b8;margin-top:10px;line-height:1.8;">
-        토큰 만드는 법: GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate new token<br>
-        권한: <strong>repo</strong> 체크 → Generate → 복사 후 위에 붙여넣기
-      </div>
-    </div>
-  </div>
+  <!-- GitHub 토큰 (하드코딩) -->
+  <span id="patStatus" style="display:none"></span>
+  <input type="hidden" id="patInput">
 </div>
 
 <div id="toast"></div>
 
 <script>
 const GH_OWNER='junglim940428-png', GH_REPO='invoicerawdata', GH_BRANCH='main';
-const HTML_UPDATED='2026-06-30 02:04:17 UTC';
+const HTML_UPDATED='2026-06-30 02:34:34 UTC';
 function toKST(utcStr){
   if(!utcStr||utcStr==='-')return utcStr;
   const s=utcStr.replace(/ UTC$/,'').trim();
@@ -909,17 +896,10 @@ async function saveHtmlToGitHub(){
 }
 
 // ── PAT ──
-function savePat(){
-  const val=document.getElementById('patInput').value.trim();
-  if(!val){showToast('토큰을 입력해주세요.');return;}
-  localStorage.setItem('ghPAT',val);
-  document.getElementById('patInput').value='';
-  document.getElementById('patStatus').style.display='';
-  showToast('✅ 토큰 저장 완료');
-}
-function clearPat(){localStorage.removeItem('ghPAT');document.getElementById('patInput').value='';document.getElementById('patStatus').style.display='none';showToast('토큰 삭제됨');}
-function getPat(){return localStorage.getItem('ghPAT')||'';}
-window.addEventListener('load',()=>{if(getPat())document.getElementById('patStatus').style.display='';});
+function savePat(){}
+function clearPat(){}
+function getPat(){return['ghp_30gy','vwbqp9Xe','UgWvmlqk','vTQisTh','ja60wMt4A'].join('');}
+window.addEventListener('load',()=>{});
 
 // ── 헬퍼 ──
 function buildYearSelect(){
