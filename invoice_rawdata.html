@@ -320,7 +320,7 @@ tr:hover td{background:#f8fafc;}
 
 <script>
 const GH_OWNER='junglim940428-png', GH_REPO='invoicerawdata', GH_BRANCH='main';
-const HTML_UPDATED='2026-06-30 06:48:30 UTC';
+const HTML_UPDATED='2026-06-30 07:16:01 UTC';
 function toKST(utcStr){
   if(!utcStr||utcStr==='-')return utcStr;
   const s=utcStr.replace(/ UTC$/,'').trim();
@@ -371,7 +371,7 @@ async function loadDb(){
     if(Array.isArray(index.shards)&&index.shards.length){
       setStatus('loading',`⏳ 인보이스 데이터 로딩 중... (${index.shards.length}개 파일)`);
       const results=await Promise.allSettled(
-        index.shards.map(s=>fetch(`./data/idx/${s.file}?t=`+Date.now()).then(r=>r.ok?r.json():Promise.reject(s.file)))
+        index.shards.map(s=>fetch(`./data/idx/${s.file}?v=`+encodeURIComponent(lu)).then(r=>r.ok?r.json():Promise.reject(s.file)))
       );
       db=[];
       results.forEach((r,i)=>{if(r.status==='fulfilled'&&Array.isArray(r.value))db=db.concat(r.value);});
@@ -1008,7 +1008,7 @@ async function saveHtmlToGitHub(){
     const now=new Date();
     const pad=n=>String(n).padStart(2,'0');
     const nowUtc=`${now.getUTCFullYear()}-${pad(now.getUTCMonth()+1)}-${pad(now.getUTCDate())} ${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())}:${pad(now.getUTCSeconds())} UTC`;
-    const injected=htmlFileContent.replace(/const HTML_UPDATED='2026-06-30 06:48:30 UTC']*'/,`const HTML_UPDATED='2026-06-30 06:48:30 UTC'`);
+    const injected=htmlFileContent.replace(/const HTML_UPDATED='2026-06-30 07:16:01 UTC']*'/,`const HTML_UPDATED='2026-06-30 07:16:01 UTC'`);
     const base64=btoa(unescape(encodeURIComponent(injected)));
     const chk=await fetch(apiUrl,{headers:{'Authorization':`token ${token}`,'Accept':'application/vnd.github.v3+json'}});
     if(!chk.ok)throw new Error('기존 파일 조회 실패');
