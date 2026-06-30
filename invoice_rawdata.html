@@ -189,6 +189,8 @@ tr:hover td{background:#f8fafc;}
             <option value="PART_NO">Part No.</option>
             <option value="FINAL_GRADE">Grade</option>
             <option value="CARTON_NO">Carton No</option>
+            <option value="STOCK_IN_WEEK">Week Code</option>
+            <option value="PALLET_NO">Pallet No</option>
           </select>
           <div style="margin-top:10px;">
           <div class="field-label">연도 선택</div>
@@ -331,7 +333,7 @@ tr:hover td{background:#f8fafc;}
 
 <script>
 const GH_OWNER='junglim940428-png', GH_REPO='invoicerawdata', GH_BRANCH='main';
-const HTML_UPDATED='2026-06-29 08:55:11 UTC';
+const HTML_UPDATED='2026-06-30 00:34:36 UTC';
 function toKST(utcStr){
   if(!utcStr||utcStr==='-')return utcStr;
   const s=utcStr.replace(/ UTC$/,'').trim();
@@ -374,7 +376,8 @@ function doSearch(){
     if(headers.includes(key))return key;
     const map={INVOICE_NO:['INVOICE_NO','Invoice No','INVOICE NO'],MODEL_NO:['MODEL_NO','MODEL NO','Model'],
       PART_NO:['PART_NO','PART NO','Part No'],FINAL_GRADE:['FINAL_GRADE','GRADE','Grade'],
-      CARTON_NO:['CARTON_NO','CARTON NO'],SHIPPING_NO:['SHIPPING_NO','S/N','SN']};
+      CARTON_NO:['CARTON_NO','CARTON NO'],SHIPPING_NO:['SHIPPING_NO','S/N','SN'],
+      STOCK_IN_WEEK:['STOCK_IN_WEEK','WEEK CODE','WEEK'],PALLET_NO:['PALLET_NO','PALLET NO','Pallet No']};
     return (map[key]||[key]).find(k=>headers.includes(k))||headers[0]||'';
   };
   const col=resolveCol(searchField);
@@ -484,9 +487,9 @@ function renderInvoiceSummary(rows, invoiceNos){
 // ── 검색 기준 변경 시 UI 업데이트 ──
 function onSearchFieldChange(){
   const f=document.getElementById('searchField').value;
-  const labels={SHIPPING_NO:'시리얼 번호 입력',INVOICE_NO:'Invoice No 입력',MODEL_NO:'Model No 입력',PART_NO:'Part No. 입력',FINAL_GRADE:'Grade 입력 (A/B/Z/N/P)',CARTON_NO:'Carton No 입력'};
-  const placeholders={SHIPPING_NO:'675516P5RQZZZS0100\n675526G3HMZZZS0100\n\n한 줄에 하나씩 또는 쉼표 구분',INVOICE_NO:'X511085263\nX511085264\n\n한 줄에 하나씩 또는 쉼표 구분',MODEL_NO:'P238HVN01-0/C2\nP320HVN02.3',PART_NO:'91.23P08.0C2\n97.32P06.300',FINAL_GRADE:'N\nZ\nA',CARTON_NO:''};
-  const hints={SHIPPING_NO:'줄바꿈·쉼표로 여러 개 입력 · 바코드 리더 연속 스캔 지원',INVOICE_NO:'Invoice No 입력 시 모델·파트·등급별 수량 요약 표시',MODEL_NO:'모델명으로 해당 모델의 전체 데이터 조회',PART_NO:'Part No.로 해당 부품의 전체 데이터 조회',FINAL_GRADE:'Grade로 필터링 (A/B/Z/N/P)',CARTON_NO:'Carton No로 조회'};
+  const labels={SHIPPING_NO:'시리얼 번호 입력',INVOICE_NO:'Invoice No 입력',MODEL_NO:'Model No 입력',PART_NO:'Part No. 입력',FINAL_GRADE:'Grade 입력 (A/B/Z/N/P)',CARTON_NO:'Carton No 입력',STOCK_IN_WEEK:'Week Code 입력',PALLET_NO:'Pallet No 입력'};
+  const placeholders={SHIPPING_NO:'675516P5RQZZZS0100\n675526G3HMZZZS0100\n\n한 줄에 하나씩 또는 쉼표 구분',INVOICE_NO:'X511085263\nX511085264\n\n한 줄에 하나씩 또는 쉼표 구분',MODEL_NO:'P238HVN01-0/C2\nP320HVN02.3',PART_NO:'91.23P08.0C2\n97.32P06.300',FINAL_GRADE:'N\nZ\nA',CARTON_NO:'CTN-001\nCTN-002',STOCK_IN_WEEK:'202601\n202602\n\n예: 연도+주차 (6자리)',PALLET_NO:'PLT-001\nPLT-002\n\n한 줄에 하나씩 또는 쉼표 구분'};
+  const hints={SHIPPING_NO:'줄바꿈·쉼표로 여러 개 입력 · 바코드 리더 연속 스캔 지원',INVOICE_NO:'Invoice No 입력 시 모델·파트·등급별 수량 요약 표시',MODEL_NO:'모델명으로 해당 모델의 전체 데이터 조회',PART_NO:'Part No.로 해당 부품의 전체 데이터 조회',FINAL_GRADE:'Grade로 필터링 (A/B/Z/N/P)',CARTON_NO:'Carton No로 조회',STOCK_IN_WEEK:'STOCK_IN_WEEK 컬럼 기준 · 연도+주차 6자리 예: 202601',PALLET_NO:'Pallet No로 해당 팔레트 전체 데이터 조회'};
   document.getElementById('inputLabel').textContent=labels[f]||f;
   document.getElementById('snInput').placeholder=placeholders[f]||`${f} 값 입력`;
   document.getElementById('searchHint').textContent=hints[f]||'';
@@ -890,21 +893,4 @@ function updateCounts(){
 }
 function setStatus(type,msg){
   const bar=document.getElementById('statusBar');
-  bar.className='status-bar '+type;
-  document.getElementById('statusMsg').textContent=msg;
-}
-function showPage(id,el){
-  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
-  document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
-  document.getElementById(id).classList.add('active');el.classList.add('active');
-}
-let _tt;
-function showToast(msg){
-  const el=document.getElementById('toast');
-  el.textContent=msg;el.classList.add('show');
-  clearTimeout(_tt);_tt=setTimeout(()=>el.classList.remove('show'),2800);
-}
-loadDb();
-</script>
-</body>
-</html>
+  bar.className='
