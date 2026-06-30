@@ -320,7 +320,7 @@ tr:hover td{background:#f8fafc;}
 
 <script>
 const GH_OWNER='junglim940428-png', GH_REPO='invoicerawdata', GH_BRANCH='main';
-const HTML_UPDATED='2026-06-30 04:35:49 UTC';
+const HTML_UPDATED='2026-06-30 06:48:30 UTC';
 function toKST(utcStr){
   if(!utcStr||utcStr==='-')return utcStr;
   const s=utcStr.replace(/ UTC$/,'').trim();
@@ -358,31 +358,36 @@ function parseJsonAsync(text){
   });
 }
 
-// ── DB 로드 ──
+// ── DB 로드 (샤드 지원) ──
 async function loadDb(){
-  setStatus('loading','DB 데이터 로딩 중...');
-  const slowTimer=setTimeout(()=>setStatus('loading','⏳ DB 다운로드 중... 잠시만 기다려주세요'),8000);
-  const controller=new AbortController();
-  const fetchTimeout=setTimeout(()=>controller.abort(),60000);
+  setStatus('loading','DB 로딩 중...');
+  const slowTimer=setTimeout(()=>setStatus('loading','⏳ DB 다운로드 중... 잠시만 기다려주세요'),5000);
   try{
-    const res=await fetch('./data/db.json?t='+Date.now(),{signal:controller.signal});
-    clearTimeout(fetchTimeout);
+    const res=await fetch('./data/db.json?t='+Date.now());
     if(!res.ok)throw new Error(`HTTP ${res.status}`);
-    setStatus('loading','⏳ DB 처리 중...');
     const text=await res.text();
+    const index=await parseJsonAsync(text);
+    let lu=index.lastUpdate||'-';
+    if(Array.isArray(index.shards)&&index.shards.length){
+      setStatus('loading',`⏳ 인보이스 데이터 로딩 중... (${index.shards.length}개 파일)`);
+      const results=await Promise.allSettled(
+        index.shards.map(s=>fetch(`./data/idx/${s.file}?t=`+Date.now()).then(r=>r.ok?r.json():Promise.reject(s.file)))
+      );
+      db=[];
+      results.forEach((r,i)=>{if(r.status==='fulfilled'&&Array.isArray(r.value))db=db.concat(r.value);});
+      headers=index.headers||[];
+    }else{
+      db=index.db||[];headers=index.headers||[];
+    }
     clearTimeout(slowTimer);
-    const data=await parseJsonAsync(text);
-    db=data.db||[];headers=data.headers||[];
-    const lu=data.lastUpdate||'-';
     document.getElementById('lastUpdate').textContent=toKST(lu);
     updateCounts();buildYearSelect();
-    setStatus(db.length>0?'ok':'ok',db.length>0
+    setStatus('ok',db.length>0
       ?`✅ DB ${db.length.toLocaleString()}건 로드 완료 · DB 업데이트: ${toKST(lu)} · 툴 업데이트: ${toKST(HTML_UPDATED)}`
       :'ℹ DB가 비어 있습니다. 파일 업로드 탭에서 xlsx 파일을 올려주세요.');
   }catch(e){
-    clearTimeout(slowTimer);clearTimeout(fetchTimeout);
-    if(e.name==='AbortError'){setStatus('error','⚠ DB 로드 시간 초과. 🔄 새로고침을 눌러 다시 시도하세요.');}
-    else{setStatus('error','⚠ DB 로드 실패: '+e.message+' · 🔄 새로고침을 눌러 다시 시도하세요.');}
+    clearTimeout(slowTimer);
+    setStatus('error','⚠ DB 로드 실패: '+e.message+' · 🔄 새로고침을 눌러 다시 시도하세요.');
   }
 }
 
@@ -784,6 +789,123 @@ function hideUploadMessages(){
   document.getElementById('uploadSuccess').style.display='none';
 }
 
+// ── xlsx 파싱 (SheetJS) ──
+function parseXlsxRows(buffer){
+  try{
+    const wb=XLSX.read(new Uint8Array(buffer),{type:'array'});
+    let headers=[],rows=[];
+    for(const sn of wb.SheetNames){
+      const ws=wb.Sheets[sn];
+      const raw=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+      if(!raw.length)continue;
+      const sh=raw[0].map(v=>String(v||'').trim());
+      if(!sh.some(h=>h))continue;
+      if(!headers.length)headers=sh;
+      for(let i=1;i<raw.length;i++){
+        const r=raw[i];
+        if(!r.some(v=>v!==''))continue;
+        const obj={};
+        sh.forEach((h,idx)=>{obj[h]=String(r[idx]??'');});
+        rows.push(obj);
+      }
+    }
+    return{headers,rows};
+  }catch(e){return{headers:[],rows:[]};}
+}
+
+// ── Git Blob API로 여러 파일 한 번에 커밋 ──
+async function pushFilesViaGitApi(token,files){
+  const base=`https://api.github.com/repos/${GH_OWNER}/${GH_REPO}`;
+  const H={'Authorization':`token ${token}`,'Content-Type':'application/json'};
+  // 1. 블롭 병렬 생성
+  const blobs=await Promise.all(files.map(async({path,content})=>{
+    const bytes=new TextEncoder().encode(content);
+    let bin='';for(let i=0;i<bytes.length;i++)bin+=String.fromCharCode(bytes[i]);
+    const r=await fetch(`${base}/git/blobs`,{method:'POST',headers:H,body:JSON.stringify({content:btoa(bin),encoding:'base64'})});
+    if(!r.ok)throw new Error(`blob 생성 실패: ${path}`);
+    const{sha}=await r.json();
+    return{path,sha};
+  }));
+  // 2. HEAD 가져오기
+  const refR=await fetch(`${base}/git/refs/heads/${GH_BRANCH}`,{headers:H});
+  const{object:{sha:headSha}}=await refR.json();
+  // 3. 현재 트리 SHA
+  const commitR=await fetch(`${base}/git/commits/${headSha}`,{headers:H});
+  const{tree:{sha:treeSha}}=await commitR.json();
+  // 4. 새 트리
+  const treeR=await fetch(`${base}/git/trees`,{method:'POST',headers:H,
+    body:JSON.stringify({base_tree:treeSha,tree:blobs.map(({path,sha})=>({path,mode:'100644',type:'blob',sha}))})});
+  const{sha:newTreeSha}=await treeR.json();
+  // 5. 커밋
+  const now=new Date().toISOString().slice(0,16).replace('T',' ');
+  const newCommitR=await fetch(`${base}/git/commits`,{method:'POST',headers:H,
+    body:JSON.stringify({message:`DB update ${now} (${files.length} files)`,tree:newTreeSha,parents:[headSha]})});
+  const{sha:newCommitSha}=await newCommitR.json();
+  // 6. ref 업데이트
+  await fetch(`${base}/git/refs/heads/${GH_BRANCH}`,{method:'PATCH',headers:H,body:JSON.stringify({sha:newCommitSha})});
+}
+
+// ── db 샤드 머지 & 즉시 업데이트 ──
+async function mergeAndPushDb(token,newRows,newHeaders){
+  const INV_KEY='INVOICE_NO', SN_KEY='SHIPPING_NO';
+  const base=`https://api.github.com/repos/${GH_OWNER}/${GH_REPO}`;
+  const H={'Authorization':`token ${token}`,'Accept':'application/vnd.github.v3+json'};
+  // 현재 인덱스 로드
+  let index={headers:[],totalCount:0,dupRemoved:0,lastUpdate:'',shards:[]};
+  try{
+    const r=await fetch(`${base}/contents/data/db.json`,{headers:H});
+    if(r.ok){
+      const m=await r.json();
+      const bytes=Uint8Array.from(atob(m.content.replace(/\n/g,'')),c=>c.charCodeAt(0));
+      const parsed=JSON.parse(new TextDecoder().decode(bytes));
+      if(parsed.shards)index=parsed;
+      else{index.headers=parsed.headers||[];index.totalCount=parsed.totalCount||0;}
+    }
+  }catch(e){}
+  if(!index.headers.length&&newHeaders.length)index.headers=newHeaders;
+  // 인보이스별 그룹화
+  const byInv={};
+  for(const row of newRows){
+    const inv=(row[INV_KEY]||'UNKNOWN').trim();
+    (byInv[inv]=byInv[inv]||[]).push(row);
+  }
+  // 각 인보이스 샤드 처리
+  const filesToPush=[];
+  let addedTotal=0,dupsTotal=0;
+  for(const[inv,rows] of Object.entries(byInv)){
+    const shardFile=inv.replace(/[^A-Za-z0-9\-_.]/g,'_')+'.json';
+    const shardPath=`data/idx/${shardFile}`;
+    // 기존 샤드 로드
+    let existing=[];
+    try{
+      const sr=await fetch(`${base}/contents/${shardPath}`,{headers:H});
+      if(sr.ok){
+        const sm=await sr.json();
+        const sb=Uint8Array.from(atob(sm.content.replace(/\n/g,'')),c=>c.charCodeAt(0));
+        existing=JSON.parse(new TextDecoder().decode(sb));
+      }
+    }catch(e){}
+    const seen=new Set(existing.map(r=>r[SN_KEY]||JSON.stringify(r)));
+    let added=0,dups=0;
+    for(const row of rows){
+      const k=row[SN_KEY]||JSON.stringify(row);
+      if(seen.has(k)){dups++;continue;}
+      seen.add(k);existing.push(row);added++;
+    }
+    addedTotal+=added;dupsTotal+=dups;
+    filesToPush.push({path:shardPath,content:JSON.stringify(existing)});
+    const es=index.shards.find(s=>s.file===shardFile);
+    if(es)es.count=existing.length;
+    else index.shards.push({file:shardFile,count:existing.length,invoice:inv});
+  }
+  index.totalCount=index.shards.reduce((s,sh)=>s+(sh.count||0),0);
+  index.dupRemoved=(index.dupRemoved||0)+dupsTotal;
+  index.lastUpdate=new Date().toISOString().slice(0,16).replace('T',' ')+' UTC';
+  filesToPush.push({path:'data/db.json',content:JSON.stringify(index)});
+  await pushFilesViaGitApi(token,filesToPush);
+  return{added:addedTotal,dups:dupsTotal,total:index.totalCount};
+}
+
 // ── GitHub xlsx 저장 (다중 파일) ──
 async function saveToGitHub(){
   const token=getPat();
@@ -797,7 +919,7 @@ async function saveToGitHub(){
   const prog=document.getElementById('uploadProgress'),progMsg=document.getElementById('uploadProgressMsg');
   prog.classList.add('show');
   const total=ready.length;
-  let done=0,failed=[];
+  let done=0,failed=[],allRows=[],allHeaders=[];
   for(const f of ready){
     try{
       progMsg.textContent=`(${done+1}/${total}) ${f.name} 업로드 중...`;
@@ -811,11 +933,22 @@ async function saveToGitHub(){
       if(chk.ok){const d=await chk.json();sha=d.sha;}
       const putRes=await fetch(apiUrl,{method:'PUT',
         headers:{'Authorization':`token ${token}`,'Accept':'application/vnd.github.v3+json','Content-Type':'application/json'},
-        body:JSON.stringify({message:`📥 인보이스 업로드: ${f.name} (${new Date().toLocaleDateString('ko-KR')})`,content:base64,branch:GH_BRANCH,...(sha&&{sha})})
+        body:JSON.stringify({message:`인보이스 업로드: ${f.name} (${new Date().toLocaleDateString('ko-KR')})`,content:base64,branch:GH_BRANCH,...(sha&&{sha})})
       });
       if(!putRes.ok){const err=await putRes.json();throw new Error(err.message||`HTTP ${putRes.status}`);}
       done++;
+      const parsed=parseXlsxRows(f.buffer);
+      if(!allHeaders.length&&parsed.headers.length)allHeaders=parsed.headers;
+      allRows=allRows.concat(parsed.rows);
     }catch(e){failed.push(`${f.name}: ${e.message}`);}
+  }
+  // db.json 즉시 업데이트
+  let dbResult=null;
+  if(done>0&&allRows.length){
+    try{
+      progMsg.textContent='DB 즉시 업데이트 중...';
+      dbResult=await mergeAndPushDb(token,allRows,allHeaders);
+    }catch(e){console.error('db.json 업데이트 실패:',e);}
   }
   prog.classList.remove('show');
   if(failed.length){
@@ -825,10 +958,12 @@ async function saveToGitHub(){
   }
   if(done>0){
     const s=document.getElementById('uploadSuccess');s.style.display='block';
-    document.getElementById('uploadSuccessMsg').innerHTML=
-      `✅ <strong>${done}개 파일</strong> GitHub raw_data/ 저장 완료<br>⚙️ Actions 자동 실행 → 약 1~2분 후 DB 업데이트<br>🔄 완료 후 S/N 검색 탭에서 새로고침 버튼 클릭`;
+    document.getElementById('uploadSuccessMsg').innerHTML=dbResult
+      ?`✅ <strong>${done}개 파일</strong> 업로드 완료 &amp; DB 즉시 업데이트!<br>총 <strong>${dbResult.total.toLocaleString()}건</strong> (이번 +${dbResult.added}건)<br>🔄 S/N 검색 탭에서 새로고침 버튼 클릭`
+      :`✅ <strong>${done}개 파일</strong> GitHub 저장 완료`;
     showToast(`✅ ${done}개 업로드 완료!`);
     if(!failed.length)resetUpload();
+    if(dbResult)loadDb();
   }
   btn.disabled=false;btn.textContent='☁️ GitHub에 저장';
 }
@@ -873,7 +1008,7 @@ async function saveHtmlToGitHub(){
     const now=new Date();
     const pad=n=>String(n).padStart(2,'0');
     const nowUtc=`${now.getUTCFullYear()}-${pad(now.getUTCMonth()+1)}-${pad(now.getUTCDate())} ${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())}:${pad(now.getUTCSeconds())} UTC`;
-    const injected=htmlFileContent.replace(/const HTML_UPDATED='[^']*'/,`const HTML_UPDATED='${nowUtc}'`);
+    const injected=htmlFileContent.replace(/const HTML_UPDATED='2026-06-30 06:48:30 UTC']*'/,`const HTML_UPDATED='2026-06-30 06:48:30 UTC'`);
     const base64=btoa(unescape(encodeURIComponent(injected)));
     const chk=await fetch(apiUrl,{headers:{'Authorization':`token ${token}`,'Accept':'application/vnd.github.v3+json'}});
     if(!chk.ok)throw new Error('기존 파일 조회 실패');
