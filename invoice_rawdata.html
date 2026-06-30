@@ -870,6 +870,16 @@ async function saveHtmlToGitHub(){
   const msgEl=document.getElementById('htmlUploadMsg');
   btn.disabled=true;btn.textContent='⏳ 업로드 중...';
   msgEl.style.display='';msgEl.style.color='#92400e';msgEl.textContent='GitHub에 업로드 중...';
+  // ── 업로드 전 파일 검증 ──
+  const required=['</html>','function setStatus','function showPage','function showToast','function loadDb','function getPat'];
+  const missing=required.filter(k=>!htmlFileContent.includes(k));
+  if(missing.length){
+    showToast('❌ 파일 검증 실패 — 업로드 취소');
+    msgEl.style.display='';msgEl.style.color='#991b1b';
+    msgEl.textContent='❌ 파일이 불완전합니다 (잘린 파일). 업로드를 취소했습니다.\n누락: '+missing.join(', ');
+    btn.disabled=false;btn.textContent='☁️ GitHub에 덮어쓰기';
+    return;
+  }
   try{
     const apiUrl=`https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/invoice_rawdata.html`;
     // 업로드 시각을 HTML_UPDATED에 자동 주입
@@ -892,4 +902,58 @@ async function saveHtmlToGitHub(){
     htmlFileContent=null;
     document.getElementById('htmlFileInput').value='';
     document.getElementById('htmlFileInfo').style.display='none';
+    document.querySelector('.html-drop-zone p').textContent='invoice_rawdata.html 파일을 여기에 드래그하거나 클릭해서 선택';
+  }catch(e){
+    msgEl.style.color='#991b1b';msgEl.textContent='❌ 실패: '+e.message;showToast('❌ '+e.message);
+  }finally{btn.disabled=false;btn.textContent='☁️ GitHub에 덮어쓰기';}
+}
+
+// ── PAT ──
+function savePat(){
+  const val=document.getElementById('patInput').value.trim();
+  if(!val){showToast('토큰을 입력해주세요.');return;}
+  localStorage.setItem('ghPAT',val);
+  document.getElementById('patInput').value='';
+  document.getElementById('patStatus').style.display='';
+  showToast('✅ 토큰 저장 완료');
+}
+function clearPat(){localStorage.removeItem('ghPAT');document.getElementById('patInput').value='';document.getElementById('patStatus').style.display='none';showToast('토큰 삭제됨');}
+function getPat(){return localStorage.getItem('ghPAT')||'';}
+window.addEventListener('load',()=>{if(getPat())document.getElementById('patStatus').style.display='';});
+
+// ── 헬퍼 ──
+function buildYearSelect(){
+  const years=new Set();
+  db.forEach(r=>{
+    const w=String(r['STOCK_IN_WEEK']||'').slice(0,4);if(/^\d{4}$/.test(w))years.add(w);
+    const m=String(r['SHIPPING_TIME']||'').match(/\b(20\d{2})\b/);if(m)years.add(m[1]);
+  });
+  document.getElementById('yearSelect').innerHTML='<option value="ALL">전체 연도</option>'+
+    [...years].sort().reverse().map(y=>`<option value="${y}">${y}년</option>`).join('');
+}
+function updateCounts(){
+  const n=db.length.toLocaleString();
+  document.getElementById('dbBadge').textContent=`DB ${n}건`;
+  document.getElementById('totalCount').textContent=n;
+}
+function setStatus(type,msg){
+  const bar=document.getElementById('statusBar');
+  bar.className='status-bar '+type;
+  document.getElementById('statusMsg').textContent=msg;
+}
+function showPage(id,el){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById(id).classList.add('active');el.classList.add('active');
+}
+let _tt;
+function showToast(msg){
+  const el=document.getElementById('toast');
+  el.textContent=msg;el.classList.add('show');
+  clearTimeout(_tt);_tt=setTimeout(()=>el.classList.remove('show'),2800);
+}
+loadDb();
+</script>
+</body>
+</html>
     document.querySelector('.html-drop-zone p').textContent='invoice_rawdata.h
