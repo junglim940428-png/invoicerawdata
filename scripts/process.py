@@ -128,7 +128,7 @@ def main():
         'fileStats':  file_stats
     }
     with open(OUT_FILE, 'w', encoding='utf-8') as f:
-        json.dump(result, f, ensure_ascii=False)
+        json.dump(result, f, ensure_ascii=False, separators=(',', ':'))
 
     print(f"\n📦 최종 DB: {len(all_rows)}건 (중복 제거 {dup_count}건)")
 
