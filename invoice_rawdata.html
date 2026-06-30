@@ -347,19 +347,44 @@ function toKST(utcStr){
 let db=[],headers=[],lastResults=[],barcodeMode=false,barcodeTimer=null,sortCol=-1,sortAsc=true;
 let selectedFiles=[],htmlFileContent=null; // selectedFiles: [{name,size,buffer}]
 
+// ── JSON 파싱을 Web Worker에서 처리 (메인 스레드 블로킹 방지) ──
+function parseJsonAsync(text){
+  return new Promise((resolve,reject)=>{
+    try{
+      const blob=new Blob(
+        ['self.onmessage=function(e){try{postMessage({ok:true,d:JSON.parse(e.data)})}catch(r){postMessage({ok:false,m:r.message})}}'],
+        {type:'text/javascript'}
+      );
+      const url=URL.createObjectURL(blob);
+      const w=new Worker(url);
+      const t=setTimeout(()=>{w.terminate();URL.revokeObjectURL(url);reject(new Error('파싱 시간 초과'));},30000);
+      w.onmessage=function(e){
+        clearTimeout(t);w.terminate();URL.revokeObjectURL(url);
+        if(e.data.ok)resolve(e.data.d);else reject(new Error(e.data.m));
+      };
+      w.onerror=function(e){clearTimeout(t);w.terminate();URL.revokeObjectURL(url);reject(new Error(e.message||'Worker 오류'));};
+      w.postMessage(text);
+    }catch(e){
+      // Web Worker 미지원 브라우저 fallback
+      try{resolve(JSON.parse(text));}catch(err){reject(err);}
+    }
+  });
+}
+
 // ── DB 로드 ──
 async function loadDb(){
   setStatus('loading','DB 데이터 로딩 중...');
-  // 10초 후 안내 메시지
-  const slowTimer=setTimeout(()=>setStatus('loading','⏳ DB 로딩 중... (파일이 커서 시간이 걸립니다. 잠시만 기다려주세요)'),10000);
-  // 60초 타임아웃
+  const slowTimer=setTimeout(()=>setStatus('loading','⏳ DB 다운로드 중... 잠시만 기다려주세요'),8000);
   const controller=new AbortController();
-  const timeout=setTimeout(()=>controller.abort(),60000);
+  const fetchTimeout=setTimeout(()=>controller.abort(),60000);
   try{
     const res=await fetch('./data/db.json?t='+Date.now(),{signal:controller.signal});
-    clearTimeout(slowTimer);clearTimeout(timeout);
+    clearTimeout(fetchTimeout);
     if(!res.ok)throw new Error(`HTTP ${res.status}`);
-    const data=await res.json();
+    setStatus('loading','⏳ DB 처리 중...');
+    const text=await res.text();
+    clearTimeout(slowTimer);
+    const data=await parseJsonAsync(text);
     db=data.db||[];headers=data.headers||[];
     const lu=data.lastUpdate||'-';
     document.getElementById('lastUpdate').textContent=toKST(lu);
@@ -368,9 +393,9 @@ async function loadDb(){
       ?`✅ DB ${db.length.toLocaleString()}건 로드 완료 · DB 업데이트: ${toKST(lu)} · 툴 업데이트: ${toKST(HTML_UPDATED)}`
       :'ℹ DB가 비어 있습니다. 파일 업로드 탭에서 xlsx 파일을 올려주세요.');
   }catch(e){
-    clearTimeout(slowTimer);clearTimeout(timeout);
-    if(e.name==='AbortError'){setStatus('error','⚠ DB 로드 시간 초과 (60초). DB 파일이 너무 큽니다. 관리자에게 문의하세요.');}
-    else{setStatus('error','⚠ DB 로드 실패: '+e.message);}
+    clearTimeout(slowTimer);clearTimeout(fetchTimeout);
+    if(e.name==='AbortError'){setStatus('error','⚠ DB 로드 시간 초과. 🔄 새로고침을 눌러 다시 시도하세요.');}
+    else{setStatus('error','⚠ DB 로드 실패: '+e.message+' · 🔄 새로고침을 눌러 다시 시도하세요.');}
   }
 }
 
@@ -867,27 +892,4 @@ async function saveHtmlToGitHub(){
     htmlFileContent=null;
     document.getElementById('htmlFileInput').value='';
     document.getElementById('htmlFileInfo').style.display='none';
-    document.querySelector('.html-drop-zone p').textContent='invoice_rawdata.html 파일을 여기에 드래그하거나 클릭해서 선택';
-  }catch(e){
-    msgEl.style.color='#991b1b';msgEl.textContent='❌ 실패: '+e.message;showToast('❌ '+e.message);
-  }finally{btn.disabled=false;btn.textContent='☁️ GitHub에 덮어쓰기';}
-}
-
-// ── PAT ──
-function savePat(){
-  const val=document.getElementById('patInput').value.trim();
-  if(!val){showToast('토큰을 입력해주세요.');return;}
-  localStorage.setItem('ghPAT',val);
-  document.getElementById('patInput').value='';
-  document.getElementById('patStatus').style.display='';
-  showToast('✅ 토큰 저장 완료');
-}
-function clearPat(){localStorage.removeItem('ghPAT');document.getElementById('patInput').value='';document.getElementById('patStatus').style.display='none';showToast('토큰 삭제됨');}
-function getPat(){return localStorage.getItem('ghPAT')||'';}
-window.addEventListener('load',()=>{if(getPat())document.getElementById('patStatus').style.display='';});
-
-// ── 헬퍼 ──
-function buildYearSelect(){
-  const years=new Set();
-  db.forEach(r=>{
-    const w=String(r['STOCK_IN_WEEK']||''
+    document.querySelector('.html-drop-zone p').textContent='invoice_rawdata.h
