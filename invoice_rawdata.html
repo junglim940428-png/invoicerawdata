@@ -333,7 +333,7 @@ tr:hover td{background:#f8fafc;}
 
 <script>
 const GH_OWNER='junglim940428-png', GH_REPO='invoicerawdata', GH_BRANCH='main';
-const HTML_UPDATED='2026-06-30 00:34:36 UTC';
+const HTML_UPDATED='2026-06-29 08:54:43 UTC';
 function toKST(utcStr){
   if(!utcStr||utcStr==='-')return utcStr;
   const s=utcStr.replace(/ UTC$/,'').trim();
@@ -350,8 +350,14 @@ let selectedFiles=[],htmlFileContent=null; // selectedFiles: [{name,size,buffer}
 // ── DB 로드 ──
 async function loadDb(){
   setStatus('loading','DB 데이터 로딩 중...');
+  // 10초 후 안내 메시지
+  const slowTimer=setTimeout(()=>setStatus('loading','⏳ DB 로딩 중... (파일이 커서 시간이 걸립니다. 잠시만 기다려주세요)'),10000);
+  // 60초 타임아웃
+  const controller=new AbortController();
+  const timeout=setTimeout(()=>controller.abort(),60000);
   try{
-    const res=await fetch('./data/db.json?t='+Date.now());
+    const res=await fetch('./data/db.json?t='+Date.now(),{signal:controller.signal});
+    clearTimeout(slowTimer);clearTimeout(timeout);
     if(!res.ok)throw new Error(`HTTP ${res.status}`);
     const data=await res.json();
     db=data.db||[];headers=data.headers||[];
@@ -361,7 +367,11 @@ async function loadDb(){
     setStatus(db.length>0?'ok':'ok',db.length>0
       ?`✅ DB ${db.length.toLocaleString()}건 로드 완료 · DB 업데이트: ${toKST(lu)} · 툴 업데이트: ${toKST(HTML_UPDATED)}`
       :'ℹ DB가 비어 있습니다. 파일 업로드 탭에서 xlsx 파일을 올려주세요.');
-  }catch(e){setStatus('error','⚠ DB 로드 실패: '+e.message);}
+  }catch(e){
+    clearTimeout(slowTimer);clearTimeout(timeout);
+    if(e.name==='AbortError'){setStatus('error','⚠ DB 로드 시간 초과 (60초). DB 파일이 너무 큽니다. 관리자에게 문의하세요.');}
+    else{setStatus('error','⚠ DB 로드 실패: '+e.message);}
+  }
 }
 
 // ── 검색 ──
@@ -880,17 +890,4 @@ window.addEventListener('load',()=>{if(getPat())document.getElementById('patStat
 function buildYearSelect(){
   const years=new Set();
   db.forEach(r=>{
-    const w=String(r['STOCK_IN_WEEK']||'').slice(0,4);if(/^\d{4}$/.test(w))years.add(w);
-    const m=String(r['SHIPPING_TIME']||'').match(/\b(20\d{2})\b/);if(m)years.add(m[1]);
-  });
-  document.getElementById('yearSelect').innerHTML='<option value="ALL">전체 연도</option>'+
-    [...years].sort().reverse().map(y=>`<option value="${y}">${y}년</option>`).join('');
-}
-function updateCounts(){
-  const n=db.length.toLocaleString();
-  document.getElementById('dbBadge').textContent=`DB ${n}건`;
-  document.getElementById('totalCount').textContent=n;
-}
-function setStatus(type,msg){
-  const bar=document.getElementById('statusBar');
-  bar.className='
+    const w=String(r['STOCK_IN_WEEK']||''
