@@ -320,7 +320,7 @@ tr:hover td{background:#f8fafc;}
 
 <script>
 const GH_OWNER='junglim940428-png', GH_REPO='invoicerawdata', GH_BRANCH='main';
-const HTML_UPDATED='2026-06-30 02:49:44 UTC';
+const HTML_UPDATED='2026-06-30 04:35:49 UTC';
 function toKST(utcStr){
   if(!utcStr||utcStr==='-')return utcStr;
   const s=utcStr.replace(/ UTC$/,'').trim();
@@ -804,8 +804,8 @@ async function saveToGitHub(){
       const uint8=new Uint8Array(f.buffer);
       let binary='';for(let i=0;i<uint8.length;i++)binary+=String.fromCharCode(uint8[i]);
       const base64=btoa(binary);
-      const path=`raw_data/${f.name}`;
-      const apiUrl=`https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/${path}`;
+      const encodedName=f.name.split('').map(c=>/[A-Za-z0-9\-_.~]/.test(c)?c:encodeURIComponent(c)).join('');
+      const apiUrl=`https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/raw_data/${encodedName}`;
       let sha=null;
       const chk=await fetch(apiUrl,{headers:{'Authorization':`token ${token}`,'Accept':'application/vnd.github.v3+json'}});
       if(chk.ok){const d=await chk.json();sha=d.sha;}
