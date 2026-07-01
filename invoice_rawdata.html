@@ -242,6 +242,9 @@ tr:hover td{background:#f8fafc;}
     .ms-ocrdrop.drag{border-color:#2563eb;background:#eff6ff;color:#1d4ed8;}
     .ms-spin{display:inline-block;width:11px;height:11px;border:2px solid #bfdbfe;border-top-color:#2563eb;border-radius:50%;animation:msspin .7s linear infinite;vertical-align:-1px;margin-right:5px;}
     @keyframes msspin{to{transform:rotate(360deg);}}
+    .ms-weekrange{display:flex;align-items:center;gap:6px;margin-top:6px;font-size:11px;color:#64748b;}
+    .ms-weekrange .ms-wr{width:82px;padding:6px 7px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;font-family:inherit;outline:none;box-sizing:border-box;}
+    .ms-weekrange .ms-wr:focus{border-color:#2563eb;}
   </style>
   <div class="card ms-card">
     <div class="card-header">
@@ -270,7 +273,7 @@ tr:hover td{background:#f8fafc;}
         <div class="ms-field"><label>Pallet No</label><div class="ms-tbwrap"><div class="ms-tagbox"><input class="ms-taginput" id="msPallet" autocomplete="off" placeholder="예: PLT000045"></div></div><div class="ms-hint">쉼표·Enter로 여러 값 · OR 검색</div></div>
         <div class="ms-field"><label>Part No</label><div class="ms-tbwrap"><div class="ms-tagbox"><input class="ms-taginput" id="msPart" autocomplete="off" placeholder="예: 12345-67890"></div></div><div class="ms-hint">쉼표·Enter로 여러 값 · OR 검색</div></div>
         <div class="ms-field"><label>Final Grade</label><div class="ms-tbwrap"><div class="ms-tagbox"><input class="ms-taginput" id="msGrade" autocomplete="off" placeholder="예: A, B, Z"></div></div><div class="ms-hint">쉼표·Enter로 여러 값 · OR 검색</div></div>
-        <div class="ms-field"><label>Stock In Week</label><div class="ms-tbwrap"><div class="ms-tagbox"><input class="ms-taginput" id="msWeek" autocomplete="off" placeholder="예: 2524 (=202524 · 앞 20 생략)"></div></div><div class="ms-hint">2524→202524 자동 · 여러 값 OR</div></div>
+        <div class="ms-field"><label>Stock In Week</label><div class="ms-tbwrap"><div class="ms-tagbox"><input class="ms-taginput" id="msWeek" autocomplete="off" placeholder="예: 2524 (=202524) · 범위 2520~2525"></div></div><div class="ms-weekrange"><span>범위</span><input id="msWeekFrom" class="ms-wr" inputmode="numeric" autocomplete="off" placeholder="시작 2520"><span>~</span><input id="msWeekTo" class="ms-wr" inputmode="numeric" autocomplete="off" placeholder="종료 2525"></div><div class="ms-hint">2524→202524 · 여러 값 OR · 범위는 위 칸 또는 태그칸에 2520~2525 (양끝 포함)</div></div>
         <div class="ms-field"><label>Shipping Time</label><div class="ms-tbwrap"><div class="ms-tagbox"><input class="ms-taginput" id="msShipTime" autocomplete="off" placeholder="예: 2025 또는 6/18/2025"></div></div><div class="ms-hint">쉼표·Enter로 여러 값 · OR 검색</div></div>
       </div>
       <div class="ms-actions">
@@ -384,7 +387,7 @@ tr:hover td{background:#f8fafc;}
 
 <script>
 const GH_OWNER='junglim940428-png', GH_REPO='invoicerawdata', GH_BRANCH='main';
-const HTML_UPDATED='2026-07-01 03:30:44 UTC';
+const HTML_UPDATED='2026-07-01 04:17:11 UTC';
 function toKST(utcStr){
   if(!utcStr||utcStr==='-')return utcStr;
   const s=utcStr.replace(/ UTC$/,'').trim();
@@ -756,6 +759,17 @@ function msIsLive(){ const el=document.getElementById('msLive'); return !el||el.
 
 // ── 조건 수집 : 태그 + 입력 중 텍스트(실시간 대응) · 빈 항목 제외 ──
 //   항목 간 AND · 같은 항목의 여러 값은 OR · Prefix(앞부분 일치) 기본, Contains 옵션
+// WEEK CODE 파싱 : 숫자만 추출 → 4자리면 앞 20 보완(짧은코드 규칙) → YYYYWW 정수. 실패 시 null
+function msParseWeek(str){
+  const d=String(str==null?'':str).replace(/\D/g,'');
+  let s=null;
+  if(d.length===4)s='20'+d;         // 2524 → 202524
+  else if(d.length>=6)s=d.slice(0,6); // 202524 그대로 (앞 6자리)
+  else return null;
+  const n=parseInt(s,10);
+  return isNaN(n)?null:n;
+}
+
 function msBuildConds(){
   const contains=msIsContains();
   const conds=[];
@@ -764,13 +778,22 @@ function msBuildConds(){
     const el=document.getElementById(f.id);
     const pend=el?el.value.trim():'';
     if(pend)vals.push(pend.toUpperCase());
-    if(!vals.length)continue;
+    const isWeek=(f.key==='STOCK_IN_WEEK');
+    let wFrom=null,wTo=null;
+    if(isWeek){ const fe=document.getElementById('msWeekFrom'),te=document.getElementById('msWeekTo'); wFrom=fe?msParseWeek(fe.value):null; wTo=te?msParseWeek(te.value):null; }
+    if(!vals.length && !(isWeek&&(wFrom!=null||wTo!=null)))continue;
     const col=msResolveCol(f.key); if(!col)continue;
     if(f.model){
       conds.push({col,model:true,contains,qs:vals.map(v=>msNormModel(v))});
-    }else if(f.key==='STOCK_IN_WEEK'){
-      const groups=vals.map(v=>{const q=v.toUpperCase();const c=[q];if(/^\d{3,5}$/.test(q)&&!q.startsWith('20'))c.push('20'+q);return c;});
-      conds.push({col,week:true,contains,groups});
+    }else if(isWeek){
+      const groups=[], ranges=[];
+      vals.forEach(v=>{
+        const mm=String(v).match(/^(\d+)\s*[-~]\s*(\d+)$/); // 태그칸에 a~b / a-b → 범위
+        if(mm){ const a=msParseWeek(mm[1]),b=msParseWeek(mm[2]); if(a!=null&&b!=null)ranges.push({min:Math.min(a,b),max:Math.max(a,b)}); }
+        else{ const q=String(v).toUpperCase();const c=[q];if(/^\d{3,5}$/.test(q)&&!q.startsWith('20'))c.push('20'+q);groups.push(c); }
+      });
+      if(wFrom!=null||wTo!=null){ let mn=wFrom!=null?wFrom:-Infinity, mx=wTo!=null?wTo:Infinity; if(mn>mx){const t=mn;mn=mx;mx=t;} ranges.push({min:mn,max:mx}); }
+      if(groups.length||ranges.length)conds.push({col,week:true,contains,groups,ranges});
     }else{
       conds.push({col,contains,vals:vals.map(v=>v.toUpperCase())});
     }
@@ -791,6 +814,10 @@ function msFilter(conds){
       }else if(cond.week){
         const s=String(cell==null?'':cell).toUpperCase();
         for(let gi=0;gi<cond.groups.length&&!hit;gi++){ const grp=cond.groups[gi]; for(let k=0;k<grp.length;k++){ const q=grp[k]; if(contains? s.indexOf(q)!==-1 : s.lastIndexOf(q,0)===0){hit=true;break;} } }
+        if(!hit && cond.ranges && cond.ranges.length){ // 범위(양끝 포함) 정수 비교
+          const wc=msParseWeek(cell);
+          if(wc!=null){ for(let ri=0;ri<cond.ranges.length;ri++){ const rg=cond.ranges[ri]; if(wc>=rg.min&&wc<=rg.max){hit=true;break;} } }
+        }
       }else{
         const s=String(cell==null?'':cell).toUpperCase();
         for(let k=0;k<cond.vals.length;k++){ const q=cond.vals[k]; if(contains? s.indexOf(q)!==-1 : s.lastIndexOf(q,0)===0){hit=true;break;} }
@@ -835,7 +862,11 @@ function msRunSearch(opts){
     renderTable([]);
     return;
   }
-  const sig=(msIsContains()?'C|':'P|')+conds.map(c=>c.col+'='+(c.qs||c.vals||[].concat.apply([],c.groups||[])).join('^')).join('&');
+  const sig=(msIsContains()?'C|':'P|')+conds.map(c=>{
+    const parts=(c.qs||c.vals||[].concat.apply([],c.groups||[])).join('^');
+    const rng=(c.ranges||[]).map(r=>r.min+'-'+r.max).join(',');
+    return c.col+'='+parts+(rng?('#'+rng):'');
+  }).join('&');
   if(!opts.force && sig===msLastSig) return; // 동일 조건이면 재검색 생략
   msLastSig=sig;
   msRenderResults(msFilter(conds), conds);
@@ -858,6 +889,7 @@ function clearMultiSearch(){
     const el=document.getElementById(f.id); if(el){el.value=''; if(el._msRender)el._msRender();}
     const ac=document.getElementById(f.id+'Ac'); if(ac){ac.style.display='none';ac.innerHTML='';}
   });
+  ['msWeekFrom','msWeekTo'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';}); // 범위 입력 초기화
   msLastSig='';
   clearSearch(); // 결과/표 초기화는 기존 함수 재사용
 }
@@ -1026,6 +1058,8 @@ async function msRunOcr(file){
   // 모드 토글 (포함검색 / 실시간)
   const cont=document.getElementById('msContains'); if(cont)cont.addEventListener('change',()=>msRunSearch({force:true}));
   const live=document.getElementById('msLive'); if(live)live.addEventListener('change',()=>{ if(live.checked)msRunSearch({force:true}); });
+  // WEEK CODE 범위 From/To : 입력 시 실시간 검색
+  ['msWeekFrom','msWeekTo'].forEach(id=>{const e=document.getElementById(id); if(e)e.addEventListener('input',msScheduleLive);});
   // OCR : 버튼 / 파일선택 / 드래그&드롭
   const ob=document.getElementById('msOcrBtn'), of=document.getElementById('msOcrFile'), od=document.getElementById('msOcrDrop');
   if(ob&&of)ob.addEventListener('click',()=>of.click());
