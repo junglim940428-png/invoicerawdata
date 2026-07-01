@@ -235,6 +235,13 @@ tr:hover td{background:#f8fafc;}
     .ms-ac div:hover{background:#f1f5f9;}
     .ms-ac div.active{background:#dbeafe;box-shadow:inset 3px 0 0 #2563eb;}
     .ms-hint{font-size:11px;color:#94a3b8;margin-top:3px;}
+    .ms-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:12px 14px;margin-bottom:10px;}
+    .ms-toggle{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:#475569;cursor:pointer;user-select:none;}
+    .ms-ocr-status{font-size:12px;color:#2563eb;}
+    .ms-ocrdrop{border:1.5px dashed #cbd5e1;border-radius:8px;padding:9px 12px;text-align:center;font-size:12px;color:#64748b;cursor:pointer;margin-bottom:10px;background:#f8fafc;transition:.15s;}
+    .ms-ocrdrop.drag{border-color:#2563eb;background:#eff6ff;color:#1d4ed8;}
+    .ms-spin{display:inline-block;width:11px;height:11px;border:2px solid #bfdbfe;border-top-color:#2563eb;border-radius:50%;animation:msspin .7s linear infinite;vertical-align:-1px;margin-right:5px;}
+    @keyframes msspin{to{transform:rotate(360deg);}}
   </style>
   <div class="card ms-card">
     <div class="card-header">
@@ -242,7 +249,15 @@ tr:hover td{background:#f8fafc;}
       <span class="hint">원하는 항목만 입력 후 검색 · 입력한 조건을 모두 만족하는 데이터만 표시</span>
     </div>
     <div class="card-body">
-      <div class="ms-hint" style="margin:0 0 10px;font-size:12px;color:#475569;">쉼표(,) 또는 Enter로 여러 값을 입력할 수 있습니다. 같은 항목의 여러 값은 <b>OR</b>, 항목 간에는 <b>AND</b>로 검색됩니다.</div>
+      <div class="ms-toolbar">
+        <button type="button" class="btn btn-ghost" id="msOcrBtn" style="font-size:12px;">🖼 이미지로 검색 (OCR)</button>
+        <label class="ms-toggle"><input type="checkbox" id="msLive" checked> 실시간 검색</label>
+        <label class="ms-toggle"><input type="checkbox" id="msContains"> 포함 검색(부분 일치)</label>
+        <span class="ms-ocr-status" id="msOcrStatus"></span>
+      </div>
+      <div class="ms-ocrdrop" id="msOcrDrop">🖼 캡처 이미지를 여기에 드래그하거나 클릭해서 선택 (PNG/JPG) → 자동 인식·검색</div>
+      <input type="file" id="msOcrFile" accept="image/*" style="display:none">
+      <div class="ms-hint" style="margin:0 0 10px;font-size:12px;color:#475569;">쉼표(,) 또는 Enter로 여러 값을 입력할 수 있습니다. 같은 항목의 여러 값은 <b>OR</b>, 항목 간에는 <b>AND</b>로 검색됩니다. 기본은 <b>앞부분 일치(Prefix)</b>이며, 위 "포함 검색"을 켜면 부분 포함으로 바뀝니다.</div>
       <div class="ms-grid">
         <div class="ms-field">
           <label>Model No</label>
@@ -369,7 +384,7 @@ tr:hover td{background:#f8fafc;}
 
 <script>
 const GH_OWNER='junglim940428-png', GH_REPO='invoicerawdata', GH_BRANCH='main';
-const HTML_UPDATED='2026-07-01 02:33:27 UTC';
+const HTML_UPDATED='2026-07-01 03:30:44 UTC';
 function toKST(utcStr){
   if(!utcStr||utcStr==='-')return utcStr;
   const s=utcStr.replace(/ UTC$/,'').trim();
@@ -720,79 +735,130 @@ function attachAutocomplete(input, box, getItems, opts){
   return {close,refresh};
 }
 
-// Model No 자동완성 소스 (회사형식 표시 + DB형식 병기, 부분검색)
+// Model No 자동완성 소스 (회사형식 표시 + DB형식 병기) · Prefix 기본, Contains 옵션
 function msModelItems(rawQuery){
   const q=msNormModel(rawQuery);
   if(!q)return [];
   msBuildModelIndex();
+  const contains=msIsContains();
   const out=[];
   for(let i=0;i<msModelIndex.length&&out.length<20;i++){
     const m=msModelIndex[i];
-    if(m.norm.includes(q))out.push({value:m.company, html:`${msEsc(m.company)} <span style="color:#94a3b8;font-size:11px">(${msEsc(m.db)})</span>`});
+    const ok=contains ? m.norm.indexOf(q)!==-1 : m.norm.lastIndexOf(q,0)===0;
+    if(ok)out.push({value:m.company, html:`${msEsc(m.company)} <span style="color:#94a3b8;font-size:11px">(${msEsc(m.db)})</span>`});
   }
   return out;
 }
 
-// ── 다중 조건 검색 : 항목 간 AND · 같은 항목의 여러 값(태그)은 OR ──
-function multiSearch(){
-  if(!db.length){showToast('DB가 아직 로드되지 않았습니다.');return;}
-  // 입력 중이던(엔터 안 친) 값도 태그로 확정한 뒤 검색
-  MS_FIELDS.forEach(f=>{const el=document.getElementById(f.id); if(el&&el.value.trim()&&el._msCommit)el._msCommit();});
+// ── 검색 모드 상태 (Prefix 기본 / Contains 옵션 · 실시간 on/off) ──
+function msIsContains(){ const el=document.getElementById('msContains'); return !!(el&&el.checked); }
+function msIsLive(){ const el=document.getElementById('msLive'); return !el||el.checked; }
+
+// ── 조건 수집 : 태그 + 입력 중 텍스트(실시간 대응) · 빈 항목 제외 ──
+//   항목 간 AND · 같은 항목의 여러 값은 OR · Prefix(앞부분 일치) 기본, Contains 옵션
+function msBuildConds(){
+  const contains=msIsContains();
   const conds=[];
   for(const f of MS_FIELDS){
-    const vals=(msTags[f.id]||[]).slice(); if(!vals.length)continue;
+    const vals=(msTags[f.id]||[]).slice();
+    const el=document.getElementById(f.id);
+    const pend=el?el.value.trim():'';
+    if(pend)vals.push(pend.toUpperCase());
+    if(!vals.length)continue;
     const col=msResolveCol(f.key); if(!col)continue;
     if(f.model){
-      conds.push({col,model:true,qs:vals.map(v=>msNormModel(v))});
+      conds.push({col,model:true,contains,qs:vals.map(v=>msNormModel(v))});
     }else if(f.key==='STOCK_IN_WEEK'){
-      // 값마다 후보 생성: '2524' → ['2524','202524'] (앞 20 자동 보완)
       const groups=vals.map(v=>{const q=v.toUpperCase();const c=[q];if(/^\d{3,5}$/.test(q)&&!q.startsWith('20'))c.push('20'+q);return c;});
-      conds.push({col,week:true,groups});
+      conds.push({col,week:true,contains,groups});
     }else{
-      conds.push({col,vals:vals.map(v=>v.toUpperCase())});
+      conds.push({col,contains,vals:vals.map(v=>v.toUpperCase())});
     }
   }
-  if(!conds.length){showToast('검색할 항목을 하나 이상 입력하세요.');return;}
-  // 필터 (단일 순회) : 각 조건은 값들 중 하나라도 맞으면(OR) 통과, 모든 조건 통과해야(AND) 결과
+  return conds;
+}
+
+// 단일 순회 필터 : 조건 내 값들 중 하나라도 맞으면(OR) 통과, 모든 조건 통과해야(AND) 결과
+function msFilter(conds){
   const results=[];
   for(let i=0;i<db.length;i++){
     const r=db[i]; let ok=true;
     for(let c=0;c<conds.length;c++){
-      const cond=conds[c], cell=r[cond.col]; let hit=false;
+      const cond=conds[c], cell=r[cond.col], contains=cond.contains; let hit=false;
       if(cond.model){
         const nc=msNormModel(cell);
-        for(let k=0;k<cond.qs.length;k++){ if(nc.includes(cond.qs[k])){hit=true;break;} }
+        for(let k=0;k<cond.qs.length;k++){ const q=cond.qs[k]; if(contains? nc.indexOf(q)!==-1 : nc.lastIndexOf(q,0)===0){hit=true;break;} }
       }else if(cond.week){
         const s=String(cell==null?'':cell).toUpperCase();
-        for(let gi=0;gi<cond.groups.length&&!hit;gi++){ const grp=cond.groups[gi]; for(let k=0;k<grp.length;k++){ if(s.indexOf(grp[k])!==-1){hit=true;break;} } }
+        for(let gi=0;gi<cond.groups.length&&!hit;gi++){ const grp=cond.groups[gi]; for(let k=0;k<grp.length;k++){ const q=grp[k]; if(contains? s.indexOf(q)!==-1 : s.lastIndexOf(q,0)===0){hit=true;break;} } }
       }else{
         const s=String(cell==null?'':cell).toUpperCase();
-        for(let k=0;k<cond.vals.length;k++){ if(s.indexOf(cond.vals[k])!==-1){hit=true;break;} }
+        for(let k=0;k<cond.vals.length;k++){ const q=cond.vals[k]; if(contains? s.indexOf(q)!==-1 : s.lastIndexOf(q,0)===0){hit=true;break;} }
       }
       if(!hit){ok=false;break;}
     }
     if(ok)results.push(r);
   }
+  return results;
+}
+
+// 결과 표시 — 기존 결과영역 요소 재사용
+function msRenderResults(results, conds){
   lastResults=results; sortCol=-1;
-  // 결과 표시 — 기존 결과영역 요소 재사용
   document.getElementById('snTagsWrap').style.display='none';
   document.getElementById('notFoundStat').style.display='none';
   document.getElementById('resultCount').textContent=results.length.toLocaleString()+'건';
   document.getElementById('downloadBtn').disabled=!results.length;
   document.getElementById('tableFooter').style.display=results.length?'':'none';
   document.getElementById('footerCount').textContent=results.length.toLocaleString();
-  // Invoice No 조건이 있으면 인보이스 요약 카드도 표시(기존 함수 재사용)
   const invCol=msResolveCol('INVOICE_NO');
   const invWrap=document.getElementById('invoiceSummaryWrap'); invWrap.style.display='none';
   if(conds.some(c=>c.col===invCol)&&results.length){ try{renderInvoiceSummary(results,(msTags['msInvoice']||[]));}catch(e){} }
   renderTable(results);
 }
+
+// 검색 실행 (중복 검색 방지 캐싱)
+let msLastSig='';
+function msRunSearch(opts){
+  opts=opts||{};
+  if(!db.length){ if(opts.manual)showToast('DB가 아직 로드되지 않았습니다.'); return; }
+  const conds=msBuildConds();
+  if(!conds.length){
+    msLastSig='';
+    if(opts.manual){ showToast('검색할 항목을 하나 이상 입력하세요.'); return; }
+    // 실시간: 조건이 없으면 결과 비우기
+    lastResults=[];
+    document.getElementById('resultCount').textContent='-';
+    document.getElementById('downloadBtn').disabled=true;
+    document.getElementById('tableFooter').style.display='none';
+    document.getElementById('invoiceSummaryWrap').style.display='none';
+    renderTable([]);
+    return;
+  }
+  const sig=(msIsContains()?'C|':'P|')+conds.map(c=>c.col+'='+(c.qs||c.vals||[].concat.apply([],c.groups||[])).join('^')).join('&');
+  if(!opts.force && sig===msLastSig) return; // 동일 조건이면 재검색 생략
+  msLastSig=sig;
+  msRenderResults(msFilter(conds), conds);
+}
+
+// 실시간 검색 (debounce 250ms) — 입력/태그 변경 시 호출
+let msLiveTimer=null;
+function msScheduleLive(){
+  if(!msIsLive())return;
+  clearTimeout(msLiveTimer);
+  msLiveTimer=setTimeout(()=>msRunSearch({}), 250);
+}
+
+// 버튼/Enter/OCR용 즉시 검색 (기존 이름 유지)
+function multiSearch(){ msRunSearch({manual:true, force:true}); }
+
 function clearMultiSearch(){
   MS_FIELDS.forEach(f=>{
     msTags[f.id]=[];
     const el=document.getElementById(f.id); if(el){el.value=''; if(el._msRender)el._msRender();}
     const ac=document.getElementById(f.id+'Ac'); if(ac){ac.style.display='none';ac.innerHTML='';}
   });
+  msLastSig='';
   clearSearch(); // 결과/표 초기화는 기존 함수 재사용
 }
 
@@ -821,13 +887,13 @@ function attachTagField(cfg){
       const t=document.createElement('span'); t.className='ms-tag';
       const s=document.createElement('span'); s.textContent=v; t.appendChild(s);
       const b=document.createElement('button'); b.type='button'; b.setAttribute('aria-label','삭제'); b.textContent='×';
-      b.addEventListener('mousedown',e=>{e.preventDefault(); msTags[id].splice(i,1); renderTags();});
+      b.addEventListener('mousedown',e=>{e.preventDefault(); msTags[id].splice(i,1); renderTags(); msScheduleLive();});
       t.appendChild(b); box.insertBefore(t,input);
     });
   }
   function addValues(text){
     String(text).split(/[\n,]+/).forEach(raw=>{const v=raw.trim().toUpperCase(); if(v&&msTags[id].indexOf(v)===-1)msTags[id].push(v);});
-    renderTags();
+    renderTags(); msScheduleLive();
   }
   function closeAc(){ if(!ac)return; ac.style.display='none'; ac.innerHTML=''; acItems=[]; acActive=-1; }
   function commit(){ if(input.value.trim())addValues(input.value); input.value=''; closeAc(); }
@@ -853,6 +919,7 @@ function attachTagField(cfg){
     if(up!==input.value){ input.value=up; try{input.setSelectionRange(st,st);}catch(_){} }
     if(input.value.indexOf(',')!==-1){ commit(); return; }
     if(getItems){ clearTimeout(debTimer); debTimer=setTimeout(refreshAc,120); }
+    msScheduleLive(); // 실시간 검색(입력 중 텍스트 포함)
   });
   input.addEventListener('keydown',e=>{
     if(getItems&&e.key==='ArrowDown'){ if(isAcOpen()){e.preventDefault(); acActive=acActive<acItems.length-1?acActive+1:0; paintAc();} return; }
@@ -870,7 +937,7 @@ function attachTagField(cfg){
       return;
     }
     if(e.key==='Escape'){ if(isAcOpen()){e.preventDefault();closeAc();} return; }
-    if(e.key==='Backspace'&&input.value===''&&msTags[id].length){ msTags[id].pop(); renderTags(); }
+    if(e.key==='Backspace'&&input.value===''&&msTags[id].length){ msTags[id].pop(); renderTags(); msScheduleLive(); }
   });
   input.addEventListener('paste',e=>{
     e.preventDefault();
@@ -881,13 +948,99 @@ function attachTagField(cfg){
   renderTags();
 }
 
-// ── 초기 바인딩 : 모든 칸을 태그 입력으로 · Model No는 자동완성 포함 ──
+// ── OCR (이미지 캡처 → 텍스트 인식 → 항목 자동 입력 → 자동 검색) ──
+function msLoadTesseract(){
+  return new Promise((resolve,reject)=>{
+    if(window.Tesseract)return resolve();
+    const s=document.createElement('script');
+    s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+    s.onload=()=>resolve(); s.onerror=()=>reject(new Error('OCR 엔진 로드 실패 (인터넷 확인)'));
+    document.head.appendChild(s);
+  });
+}
+function msOcrStatus(txt, kind){
+  const el=document.getElementById('msOcrStatus'); if(!el)return;
+  el.innerHTML=(kind==='load'?'<span class="ms-spin"></span>':'')+(txt||'');
+  el.style.color= kind==='err'?'#b91c1c': kind==='ok'?'#166534':'#2563eb';
+}
+// OCR 텍스트 → 항목별 값 파싱 (라벨 인식 + 라벨 없는 후속 줄 = 이전 항목 추가값)
+function msParseOcr(text){
+  const labels=[
+    {id:'msModel',   re:/model/i},
+    {id:'msShipping',re:/serial|shipping\s*no|s\s*\/\s*n|\bs\/n\b|\bsn\b/i},
+    {id:'msInvoice', re:/invoice/i},
+    {id:'msCarton',  re:/carton/i},
+    {id:'msPallet',  re:/pallet/i},
+    {id:'msPart',    re:/part/i},
+    {id:'msGrade',   re:/final\s*grade|grade/i},
+    {id:'msShipTime',re:/shipping\s*time|ship\s*date/i},
+    {id:'msWeek',    re:/stock\s*in\s*week|week\s*code|week/i},
+  ];
+  const out={}; MS_FIELDS.forEach(f=>out[f.id]=[]);
+  const clean=t=>t.replace(/^[^0-9A-Za-z]+/,'').replace(/[^0-9A-Za-z.\/\-]+$/,'').toUpperCase();
+  const tokenize=s=>s.split(/[\s,;|]+/).map(clean).filter(t=>(t.length>=2||/^[A-Z]$/.test(t))&&/[0-9A-Z]/.test(t));
+  const lines=String(text).split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+  let cur=null;
+  for(const line of lines){
+    let id=null, rest=line;
+    for(const lb of labels){ const m=line.match(lb.re); if(m){ id=lb.id; rest=line.slice(line.indexOf(m[0])+m[0].length); break; } }
+    if(id){
+      cur=id;
+      rest=rest.replace(/^\s*(no\.?|number)?\s*[:：\-=)]*\s*/i,'');
+      tokenize(rest).forEach(t=>{ if(out[cur].indexOf(t)===-1)out[cur].push(t); });
+    }else if(cur){
+      const toks=tokenize(line);
+      if(toks.length && !/[a-z]{4,}\s+[a-z]{4,}/i.test(line)) toks.forEach(t=>{ if(out[cur].indexOf(t)===-1)out[cur].push(t); });
+      else cur=null;
+    }
+  }
+  return out;
+}
+async function msRunOcr(file){
+  if(!file||!/^image\//i.test(file.type||'')){ msOcrStatus('이미지 파일(PNG/JPG)만 지원합니다.','err'); return; }
+  try{
+    msOcrStatus('OCR 엔진 준비 중...','load');
+    await msLoadTesseract();
+    msOcrStatus('이미지 인식 중... (수 초 소요)','load');
+    const res=await Tesseract.recognize(file,'eng');
+    const parsed=msParseOcr((res&&res.data&&res.data.text)||'');
+    let count=0;
+    MS_FIELDS.forEach(f=>{
+      if(!msTags[f.id])msTags[f.id]=[];
+      parsed[f.id].forEach(v=>{ if(msTags[f.id].indexOf(v)===-1){ msTags[f.id].push(v); count++; } });
+      const el=document.getElementById(f.id); if(el&&el._msRender)el._msRender();
+    });
+    if(count){ msOcrStatus('인식 완료 · '+count+'개 값 자동 입력됨','ok'); msRunSearch({force:true}); }
+    else msOcrStatus('인식된 검색 항목이 없습니다. 이미지 화질/각도를 확인하세요.','err');
+  }catch(e){ msOcrStatus('OCR 실패: '+e.message,'err'); }
+}
+
+// ── 초기 바인딩 : 태그 입력 · 자동완성 · 실시간/모드 토글 · OCR ──
 (function msInit(){
   MS_FIELDS.forEach(f=>{
     const input=document.getElementById(f.id); if(!input)return;
     const box=input.closest('.ms-tagbox');
     const ac=f.auto?document.getElementById(f.id+'Ac'):null;
     attachTagField({input, box, ac, getItems:f.auto?msModelItems:null, onSearch:multiSearch});
+  });
+  // 모드 토글 (포함검색 / 실시간)
+  const cont=document.getElementById('msContains'); if(cont)cont.addEventListener('change',()=>msRunSearch({force:true}));
+  const live=document.getElementById('msLive'); if(live)live.addEventListener('change',()=>{ if(live.checked)msRunSearch({force:true}); });
+  // OCR : 버튼 / 파일선택 / 드래그&드롭
+  const ob=document.getElementById('msOcrBtn'), of=document.getElementById('msOcrFile'), od=document.getElementById('msOcrDrop');
+  if(ob&&of)ob.addEventListener('click',()=>of.click());
+  if(od&&of)od.addEventListener('click',()=>of.click());
+  if(of)of.addEventListener('change',e=>{ const f=e.target.files&&e.target.files[0]; if(f)msRunOcr(f); of.value=''; });
+  if(od){
+    od.addEventListener('dragover',e=>{e.preventDefault();od.classList.add('drag');});
+    od.addEventListener('dragleave',()=>od.classList.remove('drag'));
+    od.addEventListener('drop',e=>{e.preventDefault();od.classList.remove('drag'); const f=e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files[0]; if(f)msRunOcr(f);});
+  }
+  // 클립보드 이미지 붙여넣기로도 OCR
+  document.addEventListener('paste',e=>{
+    if(!document.querySelector('.ms-card'))return;
+    const items=e.clipboardData&&e.clipboardData.items; if(!items)return;
+    for(const it of items){ if(it.type&&it.type.indexOf('image')===0){ const f=it.getAsFile(); if(f){ msRunOcr(f); e.preventDefault(); } break; } }
   });
 })();
 
