@@ -249,7 +249,7 @@ tr:hover td{background:#f8fafc;}
         <div class="ms-field"><label>Pallet No</label><input id="msPallet" autocomplete="off" placeholder="Pallet No"></div>
         <div class="ms-field"><label>Part No</label><input id="msPart" autocomplete="off" placeholder="Part No"></div>
         <div class="ms-field"><label>Final Grade</label><input id="msGrade" autocomplete="off" placeholder="A / B / Z / N / P"></div>
-        <div class="ms-field"><label>Stock In Week</label><input id="msWeek" autocomplete="off" placeholder="예: 202601"></div>
+        <div class="ms-field"><label>Stock In Week</label><input id="msWeek" autocomplete="off" placeholder="예: 2524 (=202524 · 앞 20 생략 가능)"></div>
         <div class="ms-field"><label>Shipping Time</label><input id="msShipTime" autocomplete="off" placeholder="예: 2025 또는 6/18/2025"></div>
       </div>
       <div class="ms-actions">
@@ -363,7 +363,7 @@ tr:hover td{background:#f8fafc;}
 
 <script>
 const GH_OWNER='junglim940428-png', GH_REPO='invoicerawdata', GH_BRANCH='main';
-const HTML_UPDATED='2026-06-29 08:54:43 UTC';
+const HTML_UPDATED='2026-07-01 00:47:58 UTC';
 function toKST(utcStr){
   if(!utcStr||utcStr==='-')return utcStr;
   const s=utcStr.replace(/ UTC$/,'').trim();
@@ -706,8 +706,16 @@ function multiSearch(){
   for(const f of rawFields){
     if(!f.val)continue;
     const col=msResolveCol(f.key); if(!col)continue;
-    if(f.model)conds.push({col,model:true,q:msNormModel(f.val)});
-    else conds.push({col,model:false,q:f.val.toUpperCase()});
+    if(f.model){conds.push({col,model:true,q:msNormModel(f.val)});}
+    else if(f.key==='STOCK_IN_WEEK'){
+      // 짧은 주차코드 지원: '2524' → '202524' (앞 20 자동 보완).
+      // 원본 입력값과 '20'+입력값을 모두 후보로 두어 둘 다 검색되게 함.
+      const q=f.val.toUpperCase();
+      const cands=[q];
+      if(/^\d{3,5}$/.test(q)&&!q.startsWith('20'))cands.push('20'+q);
+      conds.push({col,model:false,week:true,cands});
+    }
+    else{conds.push({col,model:false,q:f.val.toUpperCase()});}
   }
   if(!conds.length){showToast('검색할 항목을 하나 이상 입력하세요.');return;}
   // AND 필터 (단일 순회)
@@ -717,6 +725,11 @@ function multiSearch(){
     for(let c=0;c<conds.length;c++){
       const cond=conds[c], cell=r[cond.col];
       if(cond.model){ if(!msNormModel(cell).includes(cond.q)){ok=false;break;} }
+      else if(cond.week){ // 주차코드: 후보(원본/‘20’보완형) 중 하나라도 포함되면 매칭
+        const s=String(cell==null?'':cell).toUpperCase();
+        let hit=false; for(let k=0;k<cond.cands.length;k++){ if(s.indexOf(cond.cands[k])!==-1){hit=true;break;} }
+        if(!hit){ok=false;break;}
+      }
       else{ if(String(cell==null?'':cell).toUpperCase().indexOf(cond.q)===-1){ok=false;break;} }
     }
     if(ok)results.push(r);
