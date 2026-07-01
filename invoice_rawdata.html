@@ -220,10 +220,15 @@ tr:hover td{background:#f8fafc;}
   <style id="ms-style">
     .ms-card .ms-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px 18px;}
     @media(max-width:820px){.ms-card .ms-grid{grid-template-columns:1fr;}}
-    .ms-field{display:flex;flex-direction:column;position:relative;}
+    .ms-field{display:flex;flex-direction:column;}
     .ms-field label{font-size:12px;font-weight:600;color:#475569;margin-bottom:4px;}
-    .ms-field input{padding:9px 11px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;font-family:inherit;outline:none;transition:border-color .15s;box-sizing:border-box;width:100%;}
-    .ms-field input:focus{border-color:#2563eb;}
+    .ms-tbwrap{position:relative;}
+    .ms-tagbox{display:flex;flex-wrap:wrap;gap:5px;align-items:center;min-height:40px;padding:5px 7px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;cursor:text;box-sizing:border-box;}
+    .ms-tagbox.focus{border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.12);}
+    .ms-tag{display:inline-flex;align-items:center;gap:3px;background:#dbeafe;color:#1e40af;border-radius:6px;padding:2px 4px 2px 8px;font-size:12px;line-height:1.4;max-width:100%;}
+    .ms-tag span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px;}
+    .ms-tag button{border:none;background:none;color:#1e40af;cursor:pointer;font-size:15px;line-height:1;padding:0 1px;}
+    .ms-taginput{border:none;outline:none;background:transparent;flex:1;min-width:70px;font-size:13px;font-family:inherit;color:#0f172a;padding:3px 2px;}
     .ms-actions{display:flex;gap:10px;margin-top:14px;}
     .ms-ac{position:absolute;top:100%;left:0;right:0;z-index:30;background:#fff;border:1px solid #cbd5e1;border-top:none;border-radius:0 0 8px 8px;max-height:240px;overflow-y:auto;box-shadow:0 6px 18px rgba(0,0,0,.08);display:none;}
     .ms-ac div{padding:7px 11px;font-size:13px;cursor:pointer;border-bottom:1px solid #f1f5f9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
@@ -237,21 +242,21 @@ tr:hover td{background:#f8fafc;}
       <span class="hint">원하는 항목만 입력 후 검색 · 입력한 조건을 모두 만족하는 데이터만 표시</span>
     </div>
     <div class="card-body">
+      <div class="ms-hint" style="margin:0 0 10px;font-size:12px;color:#475569;">쉼표(,) 또는 Enter로 여러 값을 입력할 수 있습니다. 같은 항목의 여러 값은 <b>OR</b>, 항목 간에는 <b>AND</b>로 검색됩니다.</div>
       <div class="ms-grid">
         <div class="ms-field">
           <label>Model No</label>
-          <input id="msModel" autocomplete="off" placeholder="예: G156XTN01.000 (부분검색 가능)">
-          <div class="ms-ac" id="msModelAc"></div>
-          <div class="ms-hint">회사형식(.000)으로 입력해도 DB형식(-0/00) 자동 변환·검색 · 부분검색 지원</div>
+          <div class="ms-tbwrap"><div class="ms-tagbox"><input class="ms-taginput" id="msModel" autocomplete="off" placeholder="예: G156XTN01.000 (부분검색·여러 개 가능)"></div><div class="ms-ac" id="msModelAc"></div></div>
+          <div class="ms-hint">회사형식(.000)→DB형식(-0/00) 자동 변환 · 쉼표·Enter로 여러 값(OR)</div>
         </div>
-        <div class="ms-field"><label>Shipping No</label><input id="msShipping" autocomplete="off" placeholder="S/N (시리얼)"></div>
-        <div class="ms-field"><label>Invoice No</label><input id="msInvoice" autocomplete="off" placeholder="Invoice No"></div>
-        <div class="ms-field"><label>Carton No</label><input id="msCarton" autocomplete="off" placeholder="Carton No"></div>
-        <div class="ms-field"><label>Pallet No</label><input id="msPallet" autocomplete="off" placeholder="Pallet No"></div>
-        <div class="ms-field"><label>Part No</label><input id="msPart" autocomplete="off" placeholder="Part No"></div>
-        <div class="ms-field"><label>Final Grade</label><input id="msGrade" autocomplete="off" placeholder="A / B / Z / N / P"></div>
-        <div class="ms-field"><label>Stock In Week</label><input id="msWeek" autocomplete="off" placeholder="예: 2524 (=202524 · 앞 20 생략 가능)"></div>
-        <div class="ms-field"><label>Shipping Time</label><input id="msShipTime" autocomplete="off" placeholder="예: 2025 또는 6/18/2025"></div>
+        <div class="ms-field"><label>Shipping No</label><div class="ms-tbwrap"><div class="ms-tagbox"><input class="ms-taginput" id="msShipping" autocomplete="off" placeholder="예: ABC123456789"></div></div><div class="ms-hint">쉼표·Enter로 여러 값 · OR 검색</div></div>
+        <div class="ms-field"><label>Invoice No</label><div class="ms-tbwrap"><div class="ms-tagbox"><input class="ms-taginput" id="msInvoice" autocomplete="off" placeholder="예: INV20250618001"></div></div><div class="ms-hint">쉼표·Enter로 여러 값 · OR 검색</div></div>
+        <div class="ms-field"><label>Carton No</label><div class="ms-tbwrap"><div class="ms-tagbox"><input class="ms-taginput" id="msCarton" autocomplete="off" placeholder="예: CTN000123"></div></div><div class="ms-hint">쉼표·Enter로 여러 값 · OR 검색</div></div>
+        <div class="ms-field"><label>Pallet No</label><div class="ms-tbwrap"><div class="ms-tagbox"><input class="ms-taginput" id="msPallet" autocomplete="off" placeholder="예: PLT000045"></div></div><div class="ms-hint">쉼표·Enter로 여러 값 · OR 검색</div></div>
+        <div class="ms-field"><label>Part No</label><div class="ms-tbwrap"><div class="ms-tagbox"><input class="ms-taginput" id="msPart" autocomplete="off" placeholder="예: 12345-67890"></div></div><div class="ms-hint">쉼표·Enter로 여러 값 · OR 검색</div></div>
+        <div class="ms-field"><label>Final Grade</label><div class="ms-tbwrap"><div class="ms-tagbox"><input class="ms-taginput" id="msGrade" autocomplete="off" placeholder="예: A, B, Z"></div></div><div class="ms-hint">쉼표·Enter로 여러 값 · OR 검색</div></div>
+        <div class="ms-field"><label>Stock In Week</label><div class="ms-tbwrap"><div class="ms-tagbox"><input class="ms-taginput" id="msWeek" autocomplete="off" placeholder="예: 2524 (=202524 · 앞 20 생략)"></div></div><div class="ms-hint">2524→202524 자동 · 여러 값 OR</div></div>
+        <div class="ms-field"><label>Shipping Time</label><div class="ms-tbwrap"><div class="ms-tagbox"><input class="ms-taginput" id="msShipTime" autocomplete="off" placeholder="예: 2025 또는 6/18/2025"></div></div><div class="ms-hint">쉼표·Enter로 여러 값 · OR 검색</div></div>
       </div>
       <div class="ms-actions">
         <button class="btn btn-blue" onclick="multiSearch()" style="min-width:100px">🔍 검색</button>
@@ -364,7 +369,7 @@ tr:hover td{background:#f8fafc;}
 
 <script>
 const GH_OWNER='junglim940428-png', GH_REPO='invoicerawdata', GH_BRANCH='main';
-const HTML_UPDATED='2026-07-01 01:04:52 UTC';
+const HTML_UPDATED='2026-07-01 02:33:27 UTC';
 function toKST(utcStr){
   if(!utcStr||utcStr==='-')return utcStr;
   const s=utcStr.replace(/ UTC$/,'').trim();
@@ -728,52 +733,43 @@ function msModelItems(rawQuery){
   return out;
 }
 
-// ── 다중 조건 AND 검색 ──
+// ── 다중 조건 검색 : 항목 간 AND · 같은 항목의 여러 값(태그)은 OR ──
 function multiSearch(){
   if(!db.length){showToast('DB가 아직 로드되지 않았습니다.');return;}
-  const g=id=>document.getElementById(id).value.trim();
-  // (컬럼키, 입력값, Model여부) — 빈 칸은 조건에서 제외
-  const rawFields=[
-    {key:'MODEL_NO',     val:g('msModel'),    model:true},
-    {key:'SHIPPING_NO',  val:g('msShipping')},
-    {key:'INVOICE_NO',   val:g('msInvoice')},
-    {key:'CARTON_NO',    val:g('msCarton')},
-    {key:'PALLET_NO',    val:g('msPallet')},
-    {key:'PART_NO',      val:g('msPart')},
-    {key:'FINAL_GRADE',  val:g('msGrade')},
-    {key:'STOCK_IN_WEEK',val:g('msWeek')},
-    {key:'SHIPPING_TIME',val:g('msShipTime')},
-  ];
-  // 활성 조건만 추출 + 컬럼/정규화 사전계산 (검색 속도 최적화)
+  // 입력 중이던(엔터 안 친) 값도 태그로 확정한 뒤 검색
+  MS_FIELDS.forEach(f=>{const el=document.getElementById(f.id); if(el&&el.value.trim()&&el._msCommit)el._msCommit();});
   const conds=[];
-  for(const f of rawFields){
-    if(!f.val)continue;
+  for(const f of MS_FIELDS){
+    const vals=(msTags[f.id]||[]).slice(); if(!vals.length)continue;
     const col=msResolveCol(f.key); if(!col)continue;
-    if(f.model){conds.push({col,model:true,q:msNormModel(f.val)});}
-    else if(f.key==='STOCK_IN_WEEK'){
-      // 짧은 주차코드 지원: '2524' → '202524' (앞 20 자동 보완).
-      // 원본 입력값과 '20'+입력값을 모두 후보로 두어 둘 다 검색되게 함.
-      const q=f.val.toUpperCase();
-      const cands=[q];
-      if(/^\d{3,5}$/.test(q)&&!q.startsWith('20'))cands.push('20'+q);
-      conds.push({col,model:false,week:true,cands});
+    if(f.model){
+      conds.push({col,model:true,qs:vals.map(v=>msNormModel(v))});
+    }else if(f.key==='STOCK_IN_WEEK'){
+      // 값마다 후보 생성: '2524' → ['2524','202524'] (앞 20 자동 보완)
+      const groups=vals.map(v=>{const q=v.toUpperCase();const c=[q];if(/^\d{3,5}$/.test(q)&&!q.startsWith('20'))c.push('20'+q);return c;});
+      conds.push({col,week:true,groups});
+    }else{
+      conds.push({col,vals:vals.map(v=>v.toUpperCase())});
     }
-    else{conds.push({col,model:false,q:f.val.toUpperCase()});}
   }
   if(!conds.length){showToast('검색할 항목을 하나 이상 입력하세요.');return;}
-  // AND 필터 (단일 순회)
+  // 필터 (단일 순회) : 각 조건은 값들 중 하나라도 맞으면(OR) 통과, 모든 조건 통과해야(AND) 결과
   const results=[];
   for(let i=0;i<db.length;i++){
     const r=db[i]; let ok=true;
     for(let c=0;c<conds.length;c++){
-      const cond=conds[c], cell=r[cond.col];
-      if(cond.model){ if(!msNormModel(cell).includes(cond.q)){ok=false;break;} }
-      else if(cond.week){ // 주차코드: 후보(원본/‘20’보완형) 중 하나라도 포함되면 매칭
+      const cond=conds[c], cell=r[cond.col]; let hit=false;
+      if(cond.model){
+        const nc=msNormModel(cell);
+        for(let k=0;k<cond.qs.length;k++){ if(nc.includes(cond.qs[k])){hit=true;break;} }
+      }else if(cond.week){
         const s=String(cell==null?'':cell).toUpperCase();
-        let hit=false; for(let k=0;k<cond.cands.length;k++){ if(s.indexOf(cond.cands[k])!==-1){hit=true;break;} }
-        if(!hit){ok=false;break;}
+        for(let gi=0;gi<cond.groups.length&&!hit;gi++){ const grp=cond.groups[gi]; for(let k=0;k<grp.length;k++){ if(s.indexOf(grp[k])!==-1){hit=true;break;} } }
+      }else{
+        const s=String(cell==null?'':cell).toUpperCase();
+        for(let k=0;k<cond.vals.length;k++){ if(s.indexOf(cond.vals[k])!==-1){hit=true;break;} }
       }
-      else{ if(String(cell==null?'':cell).toUpperCase().indexOf(cond.q)===-1){ok=false;break;} }
+      if(!hit){ok=false;break;}
     }
     if(ok)results.push(r);
   }
@@ -788,39 +784,110 @@ function multiSearch(){
   // Invoice No 조건이 있으면 인보이스 요약 카드도 표시(기존 함수 재사용)
   const invCol=msResolveCol('INVOICE_NO');
   const invWrap=document.getElementById('invoiceSummaryWrap'); invWrap.style.display='none';
-  if(conds.some(c=>c.col===invCol)&&results.length){ try{renderInvoiceSummary(results,[g('msInvoice')]);}catch(e){} }
+  if(conds.some(c=>c.col===invCol)&&results.length){ try{renderInvoiceSummary(results,(msTags['msInvoice']||[]));}catch(e){} }
   renderTable(results);
 }
 function clearMultiSearch(){
-  ['msModel','msShipping','msInvoice','msCarton','msPallet','msPart','msGrade','msWeek','msShipTime']
-    .forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
-  const box=document.getElementById('msModelAc'); if(box){box.style.display='none';box.innerHTML='';}
+  MS_FIELDS.forEach(f=>{
+    msTags[f.id]=[];
+    const el=document.getElementById(f.id); if(el){el.value=''; if(el._msRender)el._msRender();}
+    const ac=document.getElementById(f.id+'Ac'); if(ac){ac.style.display='none';ac.innerHTML='';}
+  });
   clearSearch(); // 결과/표 초기화는 기존 함수 재사용
 }
 
-// ── 입력 자동 대문자 변환 (커서 위치 보존) ──
-// 영문이 포함되는 검색 항목에 적용 · 숫자/날짜엔 무해 · 검색은 기존과 동일하게 대소문자 무시
-function msBindUppercase(input){
-  input.addEventListener('input',function(){
-    const s=this.selectionStart, e=this.selectionEnd, up=this.value.toUpperCase();
-    if(up!==this.value){ this.value=up; try{this.setSelectionRange(s,e);}catch(_){} }
+// ── [공통] 태그 입력 컴포넌트 (같은 항목 여러 값 = OR) · 자동완성 옵션 포함 ──
+// 지원: Enter/쉼표로 태그 생성 · 붙여넣기 자동 분리 · ✕/Backspace 삭제 · 입력 자동 대문자
+//       (자동완성) 실시간 목록 · ↑↓ 이동 · Enter/Tab 선택 · Esc 닫기 · 마우스 클릭 · 하이라이트
+const msTags={};
+const MS_FIELDS=[
+  {id:'msModel',   key:'MODEL_NO',      model:true, auto:true},
+  {id:'msShipping',key:'SHIPPING_NO'},
+  {id:'msInvoice', key:'INVOICE_NO'},
+  {id:'msCarton',  key:'CARTON_NO'},
+  {id:'msPallet',  key:'PALLET_NO'},
+  {id:'msPart',    key:'PART_NO'},
+  {id:'msGrade',   key:'FINAL_GRADE'},
+  {id:'msWeek',    key:'STOCK_IN_WEEK'},
+  {id:'msShipTime',key:'SHIPPING_TIME'},
+];
+function attachTagField(cfg){
+  const input=cfg.input, box=cfg.box, ac=cfg.ac||null, getItems=cfg.getItems||null, onSearch=cfg.onSearch;
+  const id=input.id; if(!msTags[id])msTags[id]=[];
+  let acItems=[], acActive=-1, debTimer=null;
+  function renderTags(){
+    Array.from(box.querySelectorAll('.ms-tag')).forEach(el=>el.remove());
+    msTags[id].forEach((v,i)=>{
+      const t=document.createElement('span'); t.className='ms-tag';
+      const s=document.createElement('span'); s.textContent=v; t.appendChild(s);
+      const b=document.createElement('button'); b.type='button'; b.setAttribute('aria-label','삭제'); b.textContent='×';
+      b.addEventListener('mousedown',e=>{e.preventDefault(); msTags[id].splice(i,1); renderTags();});
+      t.appendChild(b); box.insertBefore(t,input);
+    });
+  }
+  function addValues(text){
+    String(text).split(/[\n,]+/).forEach(raw=>{const v=raw.trim().toUpperCase(); if(v&&msTags[id].indexOf(v)===-1)msTags[id].push(v);});
+    renderTags();
+  }
+  function closeAc(){ if(!ac)return; ac.style.display='none'; ac.innerHTML=''; acItems=[]; acActive=-1; }
+  function commit(){ if(input.value.trim())addValues(input.value); input.value=''; closeAc(); }
+  function isAcOpen(){ return ac&&ac.style.display==='block'&&acItems.length>0; }
+  function paintAc(){ Array.from(ac.children).forEach((ch,idx)=>ch.classList.toggle('active',idx===acActive)); if(acActive>=0&&ac.children[acActive])ac.children[acActive].scrollIntoView({block:'nearest'}); }
+  function refreshAc(){
+    if(!getItems)return;
+    acItems=getItems(input.value)||[]; acActive=-1;
+    if(!acItems.length){ac.style.display='none';ac.innerHTML='';return;}
+    ac.innerHTML=acItems.map((it,i)=>`<div data-i="${i}">${it.html}</div>`).join('');
+    ac.style.display='block';
+    Array.from(ac.children).forEach(ch=>{const i=parseInt(ch.getAttribute('data-i'),10);
+      ch.addEventListener('mousemove',()=>{acActive=i;paintAc();});
+      ch.addEventListener('mousedown',e=>{e.preventDefault();acActive=i;pickAc();});});
+  }
+  function pickAc(){ const it=acItems[acActive]; if(it)addValues(it.value); input.value=''; closeAc(); }
+  input._msCommit=commit; input._msRender=renderTags;
+  input.addEventListener('focus',()=>box.classList.add('focus'));
+  input.addEventListener('blur',()=>{box.classList.remove('focus'); setTimeout(closeAc,150);});
+  box.addEventListener('mousedown',e=>{ if(e.target===box)input.focus(); });
+  input.addEventListener('input',()=>{
+    const st=input.selectionStart, up=input.value.toUpperCase();
+    if(up!==input.value){ input.value=up; try{input.setSelectionRange(st,st);}catch(_){} }
+    if(input.value.indexOf(',')!==-1){ commit(); return; }
+    if(getItems){ clearTimeout(debTimer); debTimer=setTimeout(refreshAc,120); }
   });
+  input.addEventListener('keydown',e=>{
+    if(getItems&&e.key==='ArrowDown'){ if(isAcOpen()){e.preventDefault(); acActive=acActive<acItems.length-1?acActive+1:0; paintAc();} return; }
+    if(getItems&&e.key==='ArrowUp'){ if(isAcOpen()){e.preventDefault(); acActive=acActive>0?acActive-1:acItems.length-1; paintAc();} return; }
+    if(e.key==='Enter'){
+      e.preventDefault();
+      if(isAcOpen()&&acActive>=0)pickAc();
+      else if(input.value.trim())commit();
+      else if(onSearch)onSearch();
+      return;
+    }
+    if(e.key==='Tab'){
+      if(isAcOpen()&&acActive>=0)pickAc();     // 선택 후 기본 Tab으로 다음 칸 이동
+      else if(input.value.trim())commit();      // 태그 확정 후 기본 Tab 이동
+      return;
+    }
+    if(e.key==='Escape'){ if(isAcOpen()){e.preventDefault();closeAc();} return; }
+    if(e.key==='Backspace'&&input.value===''&&msTags[id].length){ msTags[id].pop(); renderTags(); }
+  });
+  input.addEventListener('paste',e=>{
+    e.preventDefault();
+    const t=(e.clipboardData||window.clipboardData).getData('text');
+    if(input.value.trim())addValues(input.value);
+    addValues(t); input.value=''; closeAc();
+  });
+  renderTags();
 }
 
-// ── 초기 바인딩 ──
+// ── 초기 바인딩 : 모든 칸을 태그 입력으로 · Model No는 자동완성 포함 ──
 (function msInit(){
-  const fields=['msModel','msShipping','msInvoice','msCarton','msPallet','msPart','msGrade','msWeek','msShipTime'];
-  // 1) 모든 칸: 입력 시 자동 대문자
-  fields.forEach(id=>{const el=document.getElementById(id); if(el)msBindUppercase(el);});
-
-  // 2) Model No: 공통 자동완성 컴포넌트 적용 (키보드 완전 지원). 향후 다른 칸도 동일 방식으로 추가 가능.
-  const mModel=document.getElementById('msModel'), mBox=document.getElementById('msModelAc');
-  if(mModel&&mBox)attachAutocomplete(mModel, mBox, msModelItems, {onSearch:multiSearch});
-
-  // 3) 자동완성이 없는 나머지 칸: Enter로 검색 실행
-  ['msShipping','msInvoice','msCarton','msPallet','msPart','msGrade','msWeek','msShipTime'].forEach(id=>{
-    const el=document.getElementById(id); if(!el)return;
-    el.addEventListener('keydown',e=>{ if(e.key==='Enter'){e.preventDefault();multiSearch();} });
+  MS_FIELDS.forEach(f=>{
+    const input=document.getElementById(f.id); if(!input)return;
+    const box=input.closest('.ms-tagbox');
+    const ac=f.auto?document.getElementById(f.id+'Ac'):null;
+    attachTagField({input, box, ac, getItems:f.auto?msModelItems:null, onSearch:multiSearch});
   });
 })();
 
