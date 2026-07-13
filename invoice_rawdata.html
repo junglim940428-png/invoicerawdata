@@ -387,7 +387,7 @@ tr:hover td{background:#f8fafc;}
 
 <script>
 const GH_OWNER='junglim940428-png', GH_REPO='invoicerawdata', GH_BRANCH='main';
-const HTML_UPDATED='2026-07-13 02:43:57 UTC';
+const HTML_UPDATED='2026-07-13 04:05:37 UTC';
 function toKST(utcStr){
   if(!utcStr||utcStr==='-')return utcStr;
   const s=utcStr.replace(/ UTC$/,'').trim();
@@ -1522,7 +1522,7 @@ async function saveHtmlToGitHub(){
     const now=new Date();
     const pad=n=>String(n).padStart(2,'0');
     const nowUtc=`${now.getUTCFullYear()}-${pad(now.getUTCMonth()+1)}-${pad(now.getUTCDate())} ${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())}:${pad(now.getUTCSeconds())} UTC`;
-    const injected=htmlFileContent.replace(/const HTML_UPDATED='2026-07-13 02:43:57 UTC']*'/,`const HTML_UPDATED='2026-07-13 02:43:57 UTC'`);
+    const injected=htmlFileContent.replace(/const HTML_UPDATED='2026-07-13 04:05:37 UTC']*'/,`const HTML_UPDATED='2026-07-13 04:05:37 UTC'`);
     const base64=btoa(unescape(encodeURIComponent(injected)));
     const chk=await fetch(apiUrl,{headers:{'Authorization':`token ${token}`,'Accept':'application/vnd.github.v3+json'}});
     if(!chk.ok)throw new Error('기존 파일 조회 실패');
@@ -1584,157 +1584,172 @@ function showToast(msg){
 loadDb();
 </script>
 <!-- ══════════════════════════════════════════════════════════════════
-     [추가 기능] 엑셀 파일로 S/N 일괄 조회 — 정림 제품 여부 확인
-     ▸ 이 블록 전체를 invoice_rawdata.html 의 body 종료 태그 바로 앞에 붙여넣으세요.
+     [추가 기능] 엑셀 파일로 S/N 일괄 조회 — 정림 제품 여부 확인  (v2)
      ▸ 기존 HTML/CSS/JS는 한 글자도 수정하지 않습니다 (추가 전용).
-     ▸ UI는 "🖼 이미지로 검색 (OCR)" 드롭존 바로 아래에 자동으로 삽입됩니다.
+     ▸ UI는 "🖼 이미지로 검색 (OCR)" 드롭존 바로 아래에 자동 삽입됩니다.
+     ▸ v2 : 업로드한 엑셀의 모델명 / WEEK CODE 를 결과에 승계 (미확인 건도 표기)
      ══════════════════════════════════════════════════════════════════ -->
 <script>
 (function () {
   'use strict';
 
-  // S/N 헤더로 인식할 컬럼명
-  const HDR_RE = /^(SHIPPING[_ ]?NO|S\/?N|SERIAL(\s*(NO|NUMBER))?|시리얼(\s*번호)?|SN)$/i;
-  // 헤더가 없을 때 셀 값으로 S/N 을 추정하는 패턴 (영문+숫자 혼합 10~30자)
-  const SN_RE = /^(?=.*[A-Z])(?=.*\d)[A-Z0-9]{10,30}$/i;
+  const HDR_RE   = /^(SHIPPING[_ ]?NO|S\/?N|SERIAL(\s*(NO|NUMBER))?|시리얼(\s*번호)?|SN)$/i;
+  const MODEL_RE = /^(MODEL([_ ]?(NO|NAME))?|모델(\s*명)?|품목(\s*코드)?|PANEL[_ ]?MODEL)$/i;
+  const WEEK_RE  = /^(STOCK[_ ]?IN[_ ]?WEEK|WEEK([_ ]?CODE)?|주차|입고\s*주차)$/i;
+  const SN_RE    = /^(?=.*[A-Z])(?=.*\d)[A-Z0-9]{10,30}$/i;
 
-  let xlRows = [];      // [{sn, ok, rows}]
-  let xlMatched = [];   // DB 매칭 행
+  let xlRows = [];
+  let xlMatched = [];
 
-  // ── 스타일 (xl- 프리픽스로 기존 클래스와 충돌 없음) ──
   const st = document.createElement('style');
-  st.textContent = `
-  .xl-drop{border:1.5px dashed #86efac;border-radius:8px;padding:9px 12px;text-align:center;font-size:12px;color:#15803d;cursor:pointer;margin-bottom:10px;background:#f0fdf4;transition:.15s;}
-  .xl-drop:hover{border-color:#16a34a;background:#dcfce7;}
-  .xl-drop.drag{border-color:#16a34a;background:#dcfce7;color:#166534;}
-  .xl-panel{display:none;border:1px solid #e2e8f0;border-radius:8px;padding:12px;margin-bottom:10px;background:#fff;}
-  .xl-panel.show{display:block;}
-  .xl-sum{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;}
-  .xl-chip{border:1px solid #e2e8f0;border-radius:8px;padding:6px 12px;background:#f8fafc;font-size:11px;color:#64748b;font-weight:600;}
-  .xl-chip b{display:block;font-size:17px;margin-top:2px;color:#1e293b;}
-  .xl-chip.ok b{color:#16a34a;}
-  .xl-chip.no b{color:#ef4444;}
-  .xl-tags{display:flex;flex-wrap:wrap;gap:5px;max-height:150px;overflow-y:auto;margin-bottom:10px;}
-  .xl-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
-  .xl-file{font-size:11px;color:#64748b;margin-left:auto;}
-  `;
+  st.textContent = [
+    '.xl-drop{border:1.5px dashed #86efac;border-radius:8px;padding:9px 12px;text-align:center;font-size:12px;color:#15803d;cursor:pointer;margin-bottom:10px;background:#f0fdf4;transition:.15s;}',
+    '.xl-drop:hover{border-color:#16a34a;background:#dcfce7;}',
+    '.xl-drop.drag{border-color:#16a34a;background:#dcfce7;color:#166534;}',
+    '.xl-panel{display:none;border:1px solid #e2e8f0;border-radius:8px;padding:12px;margin-bottom:10px;background:#fff;}',
+    '.xl-panel.show{display:block;}',
+    '.xl-sum{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;}',
+    '.xl-chip{border:1px solid #e2e8f0;border-radius:8px;padding:6px 12px;background:#f8fafc;font-size:11px;color:#64748b;font-weight:600;}',
+    '.xl-chip b{display:block;font-size:17px;margin-top:2px;color:#1e293b;}',
+    '.xl-chip.ok b{color:#16a34a;}',
+    '.xl-chip.no b{color:#ef4444;}',
+    '.xl-tags{display:flex;flex-wrap:wrap;gap:5px;max-height:150px;overflow-y:auto;margin-bottom:10px;}',
+    '.xl-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}',
+    '.xl-file{font-size:11px;color:#64748b;margin-left:auto;}',
+    '.xl-note{font-size:11px;color:#94a3b8;margin-bottom:8px;}'
+  ].join('');
   document.head.appendChild(st);
 
-  const $ = id => document.getElementById(id);
-  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const $ = function (id) { return document.getElementById(id); };
+  const esc = function (s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+  const cell = function (row, j) { return (j >= 0 && row && row[j] != null) ? String(row[j]).trim() : ''; };
 
-  // DB의 S/N 컬럼명 (기존 함수 재사용)
-  function snCol() {
-    try { return msResolveCol('SHIPPING_NO') || 'SHIPPING_NO'; }
-    catch (e) { return 'SHIPPING_NO'; }
-  }
+  function col(key, fb) { try { return msResolveCol(key) || fb; } catch (e) { return fb; } }
+  function snCol()    { return col('SHIPPING_NO', 'SHIPPING_NO'); }
+  function modelCol() { return col('MODEL_NO', 'MODEL_NO'); }
+  function weekCol()  { return col('STOCK_IN_WEEK', 'STOCK_IN_WEEK'); }
 
-  // ── 엑셀에서 S/N 추출 (모든 시트) ──
-  function extractSNs(wb) {
-    const out = [];
-    wb.SheetNames.forEach(nm => {
+  // 엑셀에서 S/N + 모델명 + WEEK CODE 추출 (모든 시트)
+  function extractRecs(wb) {
+    const recs = [];
+    wb.SheetNames.forEach(function (nm) {
       const rows = XLSX.utils.sheet_to_json(wb.Sheets[nm], { header: 1, defval: '', raw: false });
       if (!rows.length) return;
 
-      // 1) S/N 헤더 컬럼 찾기 (상위 20행 내)
-      let hr = -1, hc = -1;
+      let hr = -1, cSn = -1, cModel = -1, cWeek = -1;
       for (let i = 0; i < Math.min(rows.length, 20) && hr < 0; i++) {
         const row = rows[i] || [];
+        let sn = -1, md = -1, wk = -1;
         for (let j = 0; j < row.length; j++) {
-          if (HDR_RE.test(String(row[j] == null ? '' : row[j]).trim())) { hr = i; hc = j; break; }
+          const v = cell(row, j);
+          if (sn < 0 && HDR_RE.test(v)) sn = j;
+          if (md < 0 && MODEL_RE.test(v)) md = j;
+          if (wk < 0 && WEEK_RE.test(v)) wk = j;
         }
+        if (sn >= 0) { hr = i; cSn = sn; cModel = md; cWeek = wk; }
       }
 
       if (hr >= 0) {
-        // 헤더를 찾은 경우 → 해당 컬럼만 사용
         for (let i = hr + 1; i < rows.length; i++) {
-          const v = String((rows[i] || [])[hc] == null ? '' : rows[i][hc]).trim();
-          if (v) out.push(v);
+          const row = rows[i] || [];
+          const sn = cell(row, cSn);
+          if (!sn) continue;
+          recs.push({ sn: sn.toUpperCase(), model: cell(row, cModel), week: cell(row, cWeek) });
         }
       } else {
-        // 2) 헤더가 없으면 → 패턴에 맞는 셀 전체 스캔
-        rows.forEach(r => (r || []).forEach(c => {
-          const v = String(c == null ? '' : c).trim();
-          if (SN_RE.test(v)) out.push(v);
-        }));
+        rows.forEach(function (r) {
+          (r || []).forEach(function (c) {
+            const v = String(c == null ? '' : c).trim();
+            if (SN_RE.test(v)) recs.push({ sn: v.toUpperCase(), model: '', week: '' });
+          });
+        });
       }
     });
 
-    // 대문자 + 중복 제거 (입력 순서 유지)
-    const seen = new Set(), res = [];
-    out.forEach(v => {
-      const u = v.toUpperCase();
-      if (u && !seen.has(u)) { seen.add(u); res.push(u); }
+    const map = new Map();
+    recs.forEach(function (r) {
+      const e = map.get(r.sn);
+      if (!e) map.set(r.sn, { sn: r.sn, model: r.model, week: r.week });
+      else {
+        if (!e.model && r.model) e.model = r.model;
+        if (!e.week && r.week) e.week = r.week;
+      }
     });
-    return res;
+    return Array.from(map.values());
   }
 
-  // ── DB 대조 → 정림 제품 여부 판정 ──
-  function check(sns) {
-    const col = snCol();
+  // DB 대조
+  function check(recs) {
+    const sc = snCol();
     const idx = new Map();
-    db.forEach(r => {
-      const k = String(r[col] == null ? '' : r[col]).trim().toUpperCase();
+    db.forEach(function (r) {
+      const k = String(r[sc] == null ? '' : r[sc]).trim().toUpperCase();
       if (!k) return;
       if (!idx.has(k)) idx.set(k, []);
       idx.get(k).push(r);
     });
 
     const res = [], miss = [];
-    sns.forEach(sn => {
-      const hit = idx.get(sn);            // 완전 일치 우선
-      if (hit) res.push({ sn, ok: true, rows: hit });
-      else miss.push(sn);
+    recs.forEach(function (rec) {
+      const hit = idx.get(rec.sn);
+      if (hit) res.push({ sn: rec.sn, model: rec.model, week: rec.week, ok: true, rows: hit });
+      else miss.push(rec);
     });
 
-    // 미확인 건에 대해서만 부분 일치 보조 탐색 (건수가 많으면 생략 — 성능)
     if (miss.length && miss.length <= 200) {
       const keys = Array.from(idx.keys());
-      miss.forEach(sn => {
-        const k = keys.find(k => k.indexOf(sn) !== -1 || sn.indexOf(k) !== -1);
-        if (k) res.push({ sn, ok: true, rows: idx.get(k) });
-        else res.push({ sn, ok: false, rows: [] });
+      miss.forEach(function (rec) {
+        const k = keys.find(function (k) { return k.indexOf(rec.sn) !== -1 || rec.sn.indexOf(k) !== -1; });
+        res.push({ sn: rec.sn, model: rec.model, week: rec.week, ok: !!k, rows: k ? idx.get(k) : [] });
       });
     } else {
-      miss.forEach(sn => res.push({ sn, ok: false, rows: [] }));
+      miss.forEach(function (rec) {
+        res.push({ sn: rec.sn, model: rec.model, week: rec.week, ok: false, rows: [] });
+      });
     }
 
-    const order = new Map(sns.map((s, i) => [s, i]));
-    res.sort((a, b) => order.get(a.sn) - order.get(b.sn));
+    const order = new Map(recs.map(function (r, i) { return [r.sn, i]; }));
+    res.sort(function (a, b) { return order.get(a.sn) - order.get(b.sn); });
     return res;
   }
 
-  // ── 결과 표시 ──
   function render(fileName) {
-    const okList = xlRows.filter(r => r.ok);
-    const noList = xlRows.filter(r => !r.ok);
+    const okList = xlRows.filter(function (r) { return r.ok; });
+    const noList = xlRows.filter(function (r) { return !r.ok; });
 
-    // 매칭된 DB 행 (중복 제거)
     xlMatched = [];
     const seen = new Set();
-    okList.forEach(r => r.rows.forEach(row => {
-      const k = JSON.stringify(row);
-      if (!seen.has(k)) { seen.add(k); xlMatched.push(row); }
-    }));
+    okList.forEach(function (r) {
+      r.rows.forEach(function (row) {
+        const k = JSON.stringify(row);
+        if (!seen.has(k)) { seen.add(k); xlMatched.push(row); }
+      });
+    });
+
+    const hasModel = xlRows.some(function (r) { return r.model; });
+    const hasWeek  = xlRows.some(function (r) { return r.week; });
 
     $('xlPanel').classList.add('show');
     $('xlSum').innerHTML =
-      `<div class="xl-chip">엑셀 S/N<b>${xlRows.length.toLocaleString()}</b></div>` +
-      `<div class="xl-chip ok">✅ 정림 제품<b>${okList.length.toLocaleString()}</b></div>` +
-      `<div class="xl-chip no">❌ 미확인<b>${noList.length.toLocaleString()}</b></div>` +
-      `<div class="xl-chip">DB 매칭 행<b>${xlMatched.length.toLocaleString()}</b></div>`;
+      '<div class="xl-chip">엑셀 S/N<b>' + xlRows.length.toLocaleString() + '</b></div>' +
+      '<div class="xl-chip ok">✅ 정림 제품<b>' + okList.length.toLocaleString() + '</b></div>' +
+      '<div class="xl-chip no">❌ 미확인<b>' + noList.length.toLocaleString() + '</b></div>' +
+      '<div class="xl-chip">DB 매칭 행<b>' + xlMatched.length.toLocaleString() + '</b></div>';
+
+    $('xlNote').innerHTML = (hasModel || hasWeek)
+      ? '📎 업로드 파일에서 ' + (hasModel ? '<b>모델명</b>' : '') + (hasModel && hasWeek ? ' · ' : '') + (hasWeek ? '<b>WEEK CODE</b>' : '') + ' 컬럼을 인식했습니다 → 미확인 건에도 표기됩니다.'
+      : '⚠ 업로드 파일에서 모델명/WEEK CODE 컬럼을 찾지 못했습니다 → 미확인 건은 해당 값이 비어 있습니다. (헤더에 MODEL, STOCK_IN_WEEK 등이 필요)';
 
     const MAXT = 400;
     $('xlTags').innerHTML =
-      xlRows.slice(0, MAXT).map(r =>
-        `<span class="sn-tag ${r.ok ? 'found' : 'notfound'}">${r.ok ? '✓' : '✗'} ${esc(r.sn)}</span>`
-      ).join('') +
-      (xlRows.length > MAXT ? `<span class="sn-tag">…외 ${(xlRows.length - MAXT).toLocaleString()}건</span>` : '');
+      xlRows.slice(0, MAXT).map(function (r) {
+        return '<span class="sn-tag ' + (r.ok ? 'found' : 'notfound') + '">' + (r.ok ? '✓' : '✗') + ' ' + esc(r.sn) + (!r.ok && r.model ? ' · ' + esc(r.model) : '') + '</span>';
+      }).join('') +
+      (xlRows.length > MAXT ? '<span class="sn-tag">…외 ' + (xlRows.length - MAXT).toLocaleString() + '건</span>' : '');
 
     $('xlFile').textContent = '📄 ' + fileName;
     $('xlDl').disabled = !xlRows.length;
 
-    // 매칭된 DB 행을 기존 결과 테이블에 그대로 표시 (기존 함수/요소 재사용)
     lastResults = xlMatched;
     sortCol = -1;
     $('snTagsWrap').style.display = 'none';
@@ -1747,37 +1762,51 @@ loadDb();
     $('footerCount').textContent = xlMatched.length.toLocaleString();
     renderTable(xlMatched);
 
-    showToast(`엑셀 ${xlRows.length}건 조회 · 정림 ${okList.length} / 미확인 ${noList.length}`);
+    showToast('엑셀 ' + xlRows.length + '건 조회 · 정림 ' + okList.length + ' / 미확인 ' + noList.length);
   }
 
-  // ── 확인 결과 xlsx 다운로드 ──
+  // 결과 xlsx : MODEL_NO(파일) | S/N | 판정 | ...DB 컬럼
+  // STOCK_IN_WEEK 는 DB 값 우선, 없으면(미확인) 엑셀의 WEEK CODE
   function download() {
     if (!xlRows.length) { showToast('다운로드할 결과가 없습니다.'); return; }
     const cols = (typeof headers !== 'undefined' && headers.length) ? headers : [];
-    const data = xlRows.map(r => {
+    const mKey = modelCol();
+    const wKey = weekCol();
+
+    const data = xlRows.map(function (r) {
       const src = r.rows[0] || {};
-      const o = { 'S/N': r.sn, '판정': r.ok ? '정림 제품' : '미확인' };
-      cols.forEach(h => { o[h] = r.ok && src[h] !== undefined ? String(src[h]) : ''; });
+      const o = {};
+      // ① 모델명 (시리얼 왼쪽) — 엑셀 값 우선, 없으면 DB 값
+      o[mKey] = r.model || (r.ok && src[mKey] !== undefined ? String(src[mKey]) : '');
+      o['S/N'] = r.sn;
+      o['판정'] = r.ok ? '정림 제품' : '미확인';
+      // ② DB 컬럼 — 모델 컬럼은 위에서 이미 채웠으므로 덮어쓰지 않음
+      cols.forEach(function (h) {
+        if (h === mKey) return;
+        let v = (r.ok && src[h] !== undefined) ? String(src[h]) : '';
+        if (h === wKey && !v && r.week) v = r.week;   // 미확인 → 엑셀의 WEEK CODE
+        o[h] = v;
+      });
       return o;
     });
+
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), 'SN확인결과');
-    XLSX.writeFile(wb, `SN_확인결과_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    XLSX.writeFile(wb, 'SN_확인결과_' + new Date().toISOString().slice(0, 10) + '.xlsx');
   }
 
-  // ── 파일 처리 ──
   function handle(file) {
     if (!file) return;
     if (!/\.(xlsx|xls|csv)$/i.test(file.name)) { showToast('xlsx / xls / csv 파일만 지원합니다.'); return; }
     if (!db || !db.length) { showToast('DB가 아직 로드되지 않았습니다. 잠시 후 다시 시도하세요.'); return; }
 
     const fr = new FileReader();
-    fr.onload = e => {
+    fr.onload = function (e) {
       try {
         const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
-        const sns = extractSNs(wb);
-        if (!sns.length) { showToast('파일에서 시리얼 번호를 찾지 못했습니다.'); return; }
-        xlRows = check(sns);
+        const recs = extractRecs(wb);
+        if (!recs.length) { showToast('파일에서 시리얼 번호를 찾지 못했습니다.'); return; }
+        xlRows = check(recs);
         render(file.name);
       } catch (err) {
         showToast('엑셀 읽기 실패: ' + err.message);
@@ -1786,44 +1815,45 @@ loadDb();
     fr.readAsArrayBuffer(file);
   }
 
-  // ── UI 삽입 (OCR 드롭존 바로 아래) ──
   function init() {
-    const anchor = $('msOcrFile');   // OCR 숨김 input = OCR 드롭존 바로 다음 요소
+    const anchor = $('msOcrFile');
     if (!anchor) { setTimeout(init, 300); return; }
     if ($('xlDrop')) return;
 
     const wrap = document.createElement('div');
     wrap.id = 'xlWrap';
-    wrap.innerHTML = `
-      <div class="xl-drop" id="xlDrop">📊 엑셀 파일(.xlsx/.xls/.csv)을 여기에 드래그하거나 클릭해서 선택 → 파일 내 S/N 일괄 조회 · 정림 제품 확인</div>
-      <input type="file" id="xlFileInput" accept=".xlsx,.xls,.csv" style="display:none">
-      <div class="xl-panel" id="xlPanel">
-        <div class="xl-sum" id="xlSum"></div>
-        <div class="xl-tags" id="xlTags"></div>
-        <div class="xl-bar">
-          <button type="button" class="btn btn-green" id="xlDl" style="font-size:12px;" disabled>⬇ 확인결과 다운로드 (xlsx)</button>
-          <button type="button" class="btn btn-ghost" id="xlClear" style="font-size:12px;">초기화</button>
-          <span class="xl-file" id="xlFile"></span>
-        </div>
-      </div>`;
+    wrap.innerHTML =
+      '<div class="xl-drop" id="xlDrop">📊 엑셀 파일(.xlsx/.xls/.csv)을 여기에 드래그하거나 클릭해서 선택 → 파일 내 S/N 일괄 조회 · 정림 제품 확인</div>' +
+      '<input type="file" id="xlFileInput" accept=".xlsx,.xls,.csv" style="display:none">' +
+      '<div class="xl-panel" id="xlPanel">' +
+        '<div class="xl-sum" id="xlSum"></div>' +
+        '<div class="xl-note" id="xlNote"></div>' +
+        '<div class="xl-tags" id="xlTags"></div>' +
+        '<div class="xl-bar">' +
+          '<button type="button" class="btn btn-green" id="xlDl" style="font-size:12px;" disabled>⬇ 확인결과 다운로드 (xlsx)</button>' +
+          '<button type="button" class="btn btn-ghost" id="xlClear" style="font-size:12px;">초기화</button>' +
+          '<span class="xl-file" id="xlFile"></span>' +
+        '</div>' +
+      '</div>';
     anchor.insertAdjacentElement('afterend', wrap);
 
     const drop = $('xlDrop'), input = $('xlFileInput');
-    drop.addEventListener('click', () => input.click());
-    drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('drag'); });
-    drop.addEventListener('dragleave', () => drop.classList.remove('drag'));
-    drop.addEventListener('drop', e => {
+    drop.addEventListener('click', function () { input.click(); });
+    drop.addEventListener('dragover', function (e) { e.preventDefault(); drop.classList.add('drag'); });
+    drop.addEventListener('dragleave', function () { drop.classList.remove('drag'); });
+    drop.addEventListener('drop', function (e) {
       e.preventDefault();
       drop.classList.remove('drag');
       handle(e.dataTransfer.files[0]);
     });
-    input.addEventListener('change', () => { handle(input.files[0]); input.value = ''; });
+    input.addEventListener('change', function () { handle(input.files[0]); input.value = ''; });
 
     $('xlDl').addEventListener('click', download);
-    $('xlClear').addEventListener('click', () => {
+    $('xlClear').addEventListener('click', function () {
       xlRows = []; xlMatched = [];
       $('xlPanel').classList.remove('show');
       $('xlFile').textContent = '';
+      $('xlNote').innerHTML = '';
       $('xlDl').disabled = true;
       try { clearSearch(); } catch (e) {}
     });
@@ -1833,7 +1863,7 @@ loadDb();
   else init();
 })();
 </script>
-<!-- ══════════ [추가 기능] 끝 ════════
+<!-- ══════════ [추가 기능] 끝 ══════════ -->
 
 </body>
 </html>
