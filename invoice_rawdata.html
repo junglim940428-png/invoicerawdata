@@ -387,7 +387,7 @@ tr:hover td{background:#f8fafc;}
 
 <script>
 const GH_OWNER='junglim940428-png', GH_REPO='invoicerawdata', GH_BRANCH='main';
-const HTML_UPDATED='2026-07-13 05:22:53 UTC';
+const HTML_UPDATED='2026-07-13 05:27:11 UTC';
 function toKST(utcStr){
   if(!utcStr||utcStr==='-')return utcStr;
   const s=utcStr.replace(/ UTC$/,'').trim();
@@ -1522,7 +1522,7 @@ async function saveHtmlToGitHub(){
     const now=new Date();
     const pad=n=>String(n).padStart(2,'0');
     const nowUtc=`${now.getUTCFullYear()}-${pad(now.getUTCMonth()+1)}-${pad(now.getUTCDate())} ${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())}:${pad(now.getUTCSeconds())} UTC`;
-    const injected=htmlFileContent.replace(/const HTML_UPDATED='2026-07-13 05:22:53 UTC']*'/,`const HTML_UPDATED='2026-07-13 05:22:53 UTC'`);
+    const injected=htmlFileContent.replace(/const HTML_UPDATED='2026-07-13 05:27:11 UTC']*'/,`const HTML_UPDATED='2026-07-13 05:27:11 UTC'`);
     const base64=btoa(unescape(encodeURIComponent(injected)));
     const chk=await fetch(apiUrl,{headers:{'Authorization':`token ${token}`,'Accept':'application/vnd.github.v3+json'}});
     if(!chk.ok)throw new Error('기존 파일 조회 실패');
@@ -1601,6 +1601,29 @@ loadDb();
   const H_MODEL = ['MODEL','MODELNO','MODELNAME','모델','모델명','품목','품목코드','PANELMODEL'];
   const H_WEEK  = ['WC','WEEK','WEEKCODE','STOCKINWEEK','주차','입고주차'];
   const H_VER   = ['VERSION','VER','V','버전'];
+
+  // DB형식 → 회사표기 :  G156XTN01-0/00 → G156XTN01.000  ·  G215HAN01-3/01 → G215HAN01.301
+  function toCompanyModel(m) {
+    m = String(m == null ? '' : m).trim();
+    if (!m) return '';
+    const mt = m.match(/^(.*)-([0-9A-Z])\/([0-9A-Z]{2})$/i);
+    return mt ? (mt[1] + '.' + mt[2] + mt[3]) : m;
+  }
+
+  // 회사 모델명 = MODEL + '.' + 주버전 + 시리얼 끝 2자리(서브버전)
+  //   G156XTN01 + V0 + ...ZZZS0100 → G156XTN01.000
+  //   G215HAN01 + V3 + ...ZZZZ1901 → G215HAN01.301
+  //   MODEL에 이미 점(.)이 있으면 회사표기로 보고 그대로 사용
+  function joinModelVer(model, ver, sn) {
+    model = String(model == null ? '' : model).trim();
+    ver = String(ver == null ? '' : ver).trim().replace(/^V/i, '');
+    sn = String(sn == null ? '' : sn).trim();
+    if (!model) return '';
+    if (model.indexOf('.') !== -1) return model;
+    if (!ver) return model;
+    const sub = /[0-9]{2}$/.test(sn) ? sn.slice(-2) : '00';
+    return model + '.' + ver + sub;
+  }
 
   // W/C 정규화 :  26/05 → 202605  ·  2605 → 202605  ·  202605 → 그대로
   function normWeek(w) {
