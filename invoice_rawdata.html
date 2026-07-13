@@ -387,7 +387,7 @@ tr:hover td{background:#f8fafc;}
 
 <script>
 const GH_OWNER='junglim940428-png', GH_REPO='invoicerawdata', GH_BRANCH='main';
-const HTML_UPDATED='2026-07-13 04:39:16 UTC';
+const HTML_UPDATED='2026-07-13 04:50:07 UTC';
 function toKST(utcStr){
   if(!utcStr||utcStr==='-')return utcStr;
   const s=utcStr.replace(/ UTC$/,'').trim();
@@ -1522,7 +1522,7 @@ async function saveHtmlToGitHub(){
     const now=new Date();
     const pad=n=>String(n).padStart(2,'0');
     const nowUtc=`${now.getUTCFullYear()}-${pad(now.getUTCMonth()+1)}-${pad(now.getUTCDate())} ${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())}:${pad(now.getUTCSeconds())} UTC`;
-    const injected=htmlFileContent.replace(/const HTML_UPDATED='2026-07-13 04:39:16 UTC']*'/,`const HTML_UPDATED='2026-07-13 04:39:16 UTC'`);
+    const injected=htmlFileContent.replace(/const HTML_UPDATED='2026-07-13 04:50:07 UTC']*'/,`const HTML_UPDATED='2026-07-13 04:50:07 UTC'`);
     const base64=btoa(unescape(encodeURIComponent(injected)));
     const chk=await fetch(apiUrl,{headers:{'Authorization':`token ${token}`,'Accept':'application/vnd.github.v3+json'}});
     if(!chk.ok)throw new Error('기존 파일 조회 실패');
@@ -1593,34 +1593,26 @@ loadDb();
 (function () {
   'use strict';
 
-  const HDR_RE   = /^(SHIPPING[_ ]?NO|S\/?N|SERIAL(\s*(NO|NUMBER))?|시리얼(\s*번호)?|SN)$/i;
-  const MODEL_RE = /^(MODEL([_ ]?(NO|NAME))?|모델(\s*명)?|품목(\s*코드)?|PANEL[_ ]?MODEL)$/i;
-  const WEEK_RE  = /^(STOCK[_ ]?IN[_ ]?WEEK|WEEK([_ ]?CODE)?|주차|입고\s*주차)$/i;
-  const VER_RE   = /^(VERSION|VER\.?|버전)$/i;
+  // 헤더 인식 : 기호/공백 제거 후 비교 (W/C → WC, S/N → SN, Model No. → MODELNO)
+  const normHdr = function (h) {
+    return String(h == null ? '' : h).toUpperCase().replace(/[^A-Z0-9가-힣]/g, '');
+  };
+  const H_SN    = ['SHIPPINGNO','SN','SERIAL','SERIALNO','SERIALNUMBER','시리얼','시리얼번호'];
+  const H_MODEL = ['MODEL','MODELNO','MODELNAME','모델','모델명','품목','품목코드','PANELMODEL'];
+  const H_WEEK  = ['WC','WEEK','WEEKCODE','STOCKINWEEK','주차','입고주차'];
+  const H_VER   = ['VERSION','VER','V','버전'];
 
-  // DB형식 → 회사표기 변환 :  G156XTN01-0/00 → G156XTN01.000  ·  G215HAN01-3/01 → G215HAN01.301
-  function toCompanyModel(m) {
-    m = (m || '').trim();
-    if (!m) return '';
-    const mt = m.match(/^(.*)-([0-9A-Z])\/([0-9A-Z]{2})$/i);
-    return mt ? (mt[1] + '.' + mt[2] + mt[3]) : m;
+  // W/C 정규화 :  26/05 → 202605  ·  2605 → 202605  ·  202605 → 그대로
+  function normWeek(w) {
+    w = String(w == null ? '' : w).trim();
+    if (!w) return '';
+    const m = w.match(/^(\d{2})\s*[\/\-]\s*(\d{1,2})$/);       // 26/05
+    if (m) return '20' + m[1] + ('0' + m[2]).slice(-2);
+    if (/^\d{6}$/.test(w)) return w;                              // 202605
+    if (/^\d{4}$/.test(w)) return '20' + w;                       // 2605
+    return w;
   }
 
-  // 회사 모델명 표기 = MODEL + '.' + 주버전 + 시리얼 끝 2자리(서브버전)
-  //   예) G156XTN01 + V0 + ...ZZZS0100 → G156XTN01.000   (DB: G156XTN01-0/00)
-  //       G215HAN01 + V3 + ...ZZZZ1901 → G215HAN01.301   (DB: G215HAN01-3/01)
-  //       G150XTN03 + V5 + ...ZZZS0100 → G150XTN03.500   (DB: G150XTN03-5/00)
-  //   · 모델명에 이미 점(.)이 있으면 회사표기로 보고 그대로 사용
-  function joinModelVer(model, ver, sn) {
-    model = (model || '').trim();
-    ver = (ver || '').trim().replace(/^V/i, '');   // V0 → 0
-    sn = (sn || '').trim();
-    if (!model) return '';
-    if (model.indexOf('.') !== -1) return model;   // 이미 회사표기 (G156XTN01.000)
-    if (!ver) return model;                        // 버전 없으면 모델명만
-    const sub = /[0-9]{2}$/.test(sn) ? sn.slice(-2) : '00';   // 시리얼 끝 2자리 = 서브버전
-    return model + '.' + ver + sub;
-  }
   const SN_RE    = /^(?=.*[A-Z])(?=.*\d)[A-Z0-9]{10,30}$/i;
 
   let xlRows = [];
@@ -1666,11 +1658,12 @@ loadDb();
         const row = rows[i] || [];
         let sn = -1, md = -1, wk = -1, vr = -1;
         for (let j = 0; j < row.length; j++) {
-          const v = cell(row, j);
-          if (sn < 0 && HDR_RE.test(v)) sn = j;
-          if (md < 0 && MODEL_RE.test(v)) md = j;
-          if (wk < 0 && WEEK_RE.test(v)) wk = j;
-          if (vr < 0 && VER_RE.test(v)) vr = j;
+          const v = normHdr(cell(row, j));
+          if (!v) continue;
+          if (sn < 0 && H_SN.indexOf(v) !== -1) sn = j;
+          if (md < 0 && H_MODEL.indexOf(v) !== -1) md = j;
+          if (wk < 0 && H_WEEK.indexOf(v) !== -1) wk = j;
+          if (vr < 0 && H_VER.indexOf(v) !== -1) vr = j;
         }
         if (sn >= 0) { hr = i; cSn = sn; cModel = md; cWeek = wk; cVer = vr; }
       }
@@ -1680,7 +1673,7 @@ loadDb();
           const row = rows[i] || [];
           const sn = cell(row, cSn);
           if (!sn) continue;
-          recs.push({ sn: sn.toUpperCase(), model: cell(row, cModel), week: cell(row, cWeek), ver: cell(row, cVer) });
+          recs.push({ sn: sn.toUpperCase(), model: cell(row, cModel), week: normWeek(cell(row, cWeek)), ver: cell(row, cVer) });
         }
       } else {
         rows.forEach(function (r) {
