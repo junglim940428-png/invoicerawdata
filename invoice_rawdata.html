@@ -387,7 +387,7 @@ tr:hover td{background:#f8fafc;}
 
 <script>
 const GH_OWNER='junglim940428-png', GH_REPO='invoicerawdata', GH_BRANCH='main';
-const HTML_UPDATED='2026-07-13 05:27:11 UTC';
+const HTML_UPDATED='2026-07-23 02:43:25 UTC';
 function toKST(utcStr){
   if(!utcStr||utcStr==='-')return utcStr;
   const s=utcStr.replace(/ UTC$/,'').trim();
@@ -1522,7 +1522,7 @@ async function saveHtmlToGitHub(){
     const now=new Date();
     const pad=n=>String(n).padStart(2,'0');
     const nowUtc=`${now.getUTCFullYear()}-${pad(now.getUTCMonth()+1)}-${pad(now.getUTCDate())} ${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())}:${pad(now.getUTCSeconds())} UTC`;
-    const injected=htmlFileContent.replace(/const HTML_UPDATED='2026-07-13 05:27:11 UTC']*'/,`const HTML_UPDATED='2026-07-13 05:27:11 UTC'`);
+    const injected=htmlFileContent.replace(/const HTML_UPDATED='2026-07-23 02:43:25 UTC']*'/,`const HTML_UPDATED='2026-07-23 02:43:25 UTC'`);
     const base64=btoa(unescape(encodeURIComponent(injected)));
     const chk=await fetch(apiUrl,{headers:{'Authorization':`token ${token}`,'Accept':'application/vnd.github.v3+json'}});
     if(!chk.ok)throw new Error('기존 파일 조회 실패');
@@ -1909,6 +1909,152 @@ loadDb();
 })();
 </script>
 <!-- ══════════ [추가 기능] 끝 ══════════ -->
+
+
+<!-- ══════════════════════════════════════════════════════════════════
+     [추가 기능] 다중 조건 검색 — 조회 / 미조회 값 표시  (append-only)
+     ▸ 기존 함수는 수정하지 않고 msRunSearch / clearMultiSearch 를 감싸서 동작.
+     ▸ 입력한 값 중 결과에 포함된 값은 ✓, 안 걸린 값은 ✗ 로 표시.
+     ══════════════════════════════════════════════════════════════════ -->
+<script>
+(function () {
+  'use strict';
+
+  const LABEL = {
+    MODEL_NO: 'Model No', SHIPPING_NO: 'Shipping No', INVOICE_NO: 'Invoice No',
+    CARTON_NO: 'Carton No', PALLET_NO: 'Pallet No', PART_NO: 'Part No',
+    FINAL_GRADE: 'Final Grade', STOCK_IN_WEEK: 'Stock In Week', SHIPPING_TIME: 'Shipping Time'
+  };
+  const esc = function (s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+
+  // 한 값이 결과행 중 하나라도 매칭되는가 (msBuildConds/msFilter 와 동일 규칙)
+  function valHits(field, rawVal, rows, contains) {
+    const c = msResolveCol(field.key);
+    if (!c) return false;
+
+    if (field.model) {
+      const q = msNormModel(rawVal);
+      if (!q) return false;
+      for (let i = 0; i < rows.length; i++) {
+        const nc = msNormModel(rows[i][c]);
+        if (contains ? nc.indexOf(q) !== -1 : nc.lastIndexOf(q, 0) === 0) return true;
+      }
+      return false;
+    }
+
+    if (field.key === 'STOCK_IN_WEEK') {
+      const mm = String(rawVal).match(/^(\d+)\s*[-~]\s*(\d+)$/);
+      if (mm) {
+        const a = msParseWeek(mm[1]), b = msParseWeek(mm[2]);
+        if (a == null || b == null) return false;
+        const mn = Math.min(a, b), mx = Math.max(a, b);
+        for (let i = 0; i < rows.length; i++) {
+          const wc = msParseWeek(rows[i][c]);
+          if (wc != null && wc >= mn && wc <= mx) return true;
+        }
+        return false;
+      }
+      const q = String(rawVal).toUpperCase();
+      const cand = [q];
+      if (/^\d{3,5}$/.test(q) && !q.startsWith('20')) cand.push('20' + q);
+      for (let i = 0; i < rows.length; i++) {
+        const s = String(rows[i][c] == null ? '' : rows[i][c]).toUpperCase();
+        for (let k = 0; k < cand.length; k++) {
+          if (contains ? s.indexOf(cand[k]) !== -1 : s.lastIndexOf(cand[k], 0) === 0) return true;
+        }
+      }
+      return false;
+    }
+
+    const q = String(rawVal).toUpperCase();
+    for (let i = 0; i < rows.length; i++) {
+      const s = String(rows[i][c] == null ? '' : rows[i][c]).toUpperCase();
+      if (contains ? s.indexOf(q) !== -1 : s.lastIndexOf(q, 0) === 0) return true;
+    }
+    return false;
+  }
+
+  // 값 태그 계산 (테스트/렌더 공용)
+  function compute(rows) {
+    const contains = (typeof msIsContains === 'function') ? msIsContains() : false;
+    const groups = [];
+    let miss = 0, totalVals = 0;
+    for (let fi = 0; fi < MS_FIELDS.length; fi++) {
+      const f = MS_FIELDS[fi];
+      const vals = (msTags[f.id] || []).slice();
+      const el = document.getElementById(f.id);
+      const pend = el ? el.value.trim().toUpperCase() : '';
+      if (pend && vals.indexOf(pend) === -1) vals.push(pend);
+      if (!vals.length) continue;
+      const items = vals.map(function (v) {
+        const ok = valHits(f, v, rows, contains);
+        if (!ok) miss++;
+        totalVals++;
+        return { v: v, ok: ok };
+      });
+      groups.push({ key: f.key, label: LABEL[f.key] || f.key, items: items });
+    }
+    return { groups: groups, miss: miss, totalVals: totalVals };
+  }
+
+  function paint(rows) {
+    const wrap = document.getElementById('msNfCard');
+    const box = document.getElementById('msNfTags');
+    if (!wrap || !box) return;
+    const res = compute(rows || []);
+    if (!res.groups.length) { wrap.style.display = 'none'; box.innerHTML = ''; return; }
+
+    let html = res.miss > 0
+      ? '<span style="font-size:12px;font-weight:800;color:#ef4444;margin-right:8px;">✗ 미조회 ' + res.miss + '건</span>'
+      : '<span style="font-size:12px;font-weight:800;color:#16a34a;margin-right:8px;">✓ 전체 조회됨</span>';
+
+    res.groups.forEach(function (g) {
+      html += '<span style="font-size:11px;font-weight:700;color:#475569;margin:0 4px 0 8px;">' + esc(g.label) + ':</span>';
+      g.items.forEach(function (it) {
+        html += '<span class="sn-tag ' + (it.ok ? 'found' : 'notfound') + '">' + (it.ok ? '✓' : '✗') + ' ' + esc(it.v) + '</span>';
+      });
+    });
+    box.innerHTML = html;
+    wrap.style.display = '';
+  }
+
+  function hide() {
+    const wrap = document.getElementById('msNfCard');
+    if (wrap) { wrap.style.display = 'none'; const b = document.getElementById('msNfTags'); if (b) b.innerHTML = ''; }
+  }
+
+  function wrapFns() {
+    if (typeof window.msRunSearch === 'function' && !window.msRunSearch.__nf) {
+      const orig = window.msRunSearch;
+      const w = function () { const r = orig.apply(this, arguments); try { paint(lastResults || []); } catch (e) {} return r; };
+      w.__nf = true; window.msRunSearch = w;
+    }
+    if (typeof window.clearMultiSearch === 'function' && !window.clearMultiSearch.__nf) {
+      const orig2 = window.clearMultiSearch;
+      const w2 = function () { const r = orig2.apply(this, arguments); hide(); return r; };
+      w2.__nf = true; window.clearMultiSearch = w2;
+    }
+  }
+
+  function init() {
+    const card = document.querySelector('.ms-card');
+    if (!card || typeof window.msRunSearch !== 'function') { setTimeout(init, 300); return; }
+    if (!document.getElementById('msNfCard')) {
+      const el = document.createElement('div');
+      el.className = 'card';
+      el.id = 'msNfCard';
+      el.style.cssText = 'display:none;margin-bottom:14px;';
+      el.innerHTML = '<div class="sn-tags" id="msNfTags"></div>';
+      card.insertAdjacentElement('afterend', el);
+    }
+    wrapFns();
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
+</script>
+<!-- ══════════ [추가 기능] 다중검색 미조회 표시 끝 ══════════ -->
 
 </body>
 </html>
