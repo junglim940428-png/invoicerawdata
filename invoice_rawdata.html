@@ -387,7 +387,7 @@ tr:hover td{background:#f8fafc;}
 
 <script>
 const GH_OWNER='junglim940428-png', GH_REPO='invoicerawdata', GH_BRANCH='main';
-const HTML_UPDATED='2026-07-23 02:48:00 UTC';
+const HTML_UPDATED='2026-07-23 02:59:13 UTC';
 function toKST(utcStr){
   if(!utcStr||utcStr==='-')return utcStr;
   const s=utcStr.replace(/ UTC$/,'').trim();
@@ -1522,7 +1522,7 @@ async function saveHtmlToGitHub(){
     const now=new Date();
     const pad=n=>String(n).padStart(2,'0');
     const nowUtc=`${now.getUTCFullYear()}-${pad(now.getUTCMonth()+1)}-${pad(now.getUTCDate())} ${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())}:${pad(now.getUTCSeconds())} UTC`;
-    const injected=htmlFileContent.replace(/const HTML_UPDATED='2026-07-23 02:48:00 UTC']*'/,`const HTML_UPDATED='2026-07-23 02:48:00 UTC'`);
+    const injected=htmlFileContent.replace(/const HTML_UPDATED='2026-07-23 02:59:13 UTC']*'/,`const HTML_UPDATED='2026-07-23 02:59:13 UTC'`);
     const base64=btoa(unescape(encodeURIComponent(injected)));
     const chk=await fetch(apiUrl,{headers:{'Authorization':`token ${token}`,'Accept':'application/vnd.github.v3+json'}});
     if(!chk.ok)throw new Error('기존 파일 조회 실패');
@@ -2002,10 +2002,15 @@ loadDb();
     const box = document.getElementById('msNfTags');
     if (!wrap || !box) return;
     const res = compute(rows || []);
-    if (!res.groups.length) { wrap.style.display = 'none'; box.innerHTML = ''; return; }
+    if (!res.groups.length) { wrap.style.display = 'none'; box.innerHTML = ''; missVals = []; return; }
+
+    // 미조회 값만 따로 모으기 (복사용)
+    missVals = [];
+    res.groups.forEach(function (g) { g.items.forEach(function (it) { if (!it.ok) missVals.push(it.v); }); });
 
     let html = res.miss > 0
       ? '<span style="font-size:12px;font-weight:800;color:#ef4444;margin-right:8px;">✗ 미조회 ' + res.miss + '건</span>'
+        + '<button type="button" id="msNfCopy" class="btn btn-ghost" style="font-size:11px;padding:3px 9px;margin-right:8px;">📋 미조회 복사</button>'
       : '<span style="font-size:12px;font-weight:800;color:#16a34a;margin-right:8px;">✓ 전체 조회됨</span>';
 
     res.groups.forEach(function (g) {
@@ -2016,6 +2021,27 @@ loadDb();
     });
     box.innerHTML = html;
     wrap.style.display = '';
+
+    const cbtn = document.getElementById('msNfCopy');
+    if (cbtn) cbtn.addEventListener('click', copyMiss);
+  }
+
+  // 미조회 값을 클립보드로 복사 (한 줄에 하나 → 엑셀·검색창에 바로 붙여넣기 가능)
+  let missVals = [];
+  function copyMiss() {
+    if (!missVals.length) { showToast('복사할 미조회 값이 없습니다.'); return; }
+    const text = missVals.join('\n');
+    const done = function () { showToast('📋 미조회 ' + missVals.length + '건 복사됨'); };
+    const fallback = function () {
+      const ta = document.createElement('textarea');
+      ta.value = text; ta.style.position = 'fixed'; ta.style.left = '-9999px';
+      document.body.appendChild(ta); ta.focus(); ta.select();
+      try { document.execCommand('copy'); done(); } catch (e) { showToast('복사 실패 — 태그를 직접 선택하세요.'); }
+      document.body.removeChild(ta);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, fallback);
+    } else { fallback(); }
   }
 
   function hide() {
