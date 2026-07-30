@@ -387,7 +387,7 @@ tr:hover td{background:#f8fafc;}
 
 <script>
 const GH_OWNER='junglim940428-png', GH_REPO='invoicerawdata', GH_BRANCH='main';
-const HTML_UPDATED='2026-07-23 03:26:01 UTC';
+const HTML_UPDATED='2026-07-30 07:55:05 UTC';
 function toKST(utcStr){
   if(!utcStr||utcStr==='-')return utcStr;
   const s=utcStr.replace(/ UTC$/,'').trim();
@@ -1385,7 +1385,7 @@ async function mergeAndPushDb(token,newRows,newHeaders){
   }
   // 각 인보이스 샤드 처리
   const filesToPush=[];
-  let addedTotal=0,dupsTotal=0;
+  let addedTotal=0,dupsTotal=0,filledTotal=0;
   for(const[inv,rows] of Object.entries(byInv)){
     const shardFile=inv.replace(/[^A-Za-z0-9\-_.]/g,'_')+'.json';
     const shardPath=`data/idx/${shardFile}`;
@@ -1399,14 +1399,25 @@ async function mergeAndPushDb(token,newRows,newHeaders){
         existing=JSON.parse(new TextDecoder().decode(sb));
       }
     }catch(e){}
-    const seen=new Set(existing.map(r=>r[SN_KEY]||JSON.stringify(r)));
-    let added=0,dups=0;
+    const byKey=new Map();
+    existing.forEach(r=>{const kk=r[SN_KEY]||JSON.stringify(r); if(!byKey.has(kk))byKey.set(kk,r);});
+    let added=0,dups=0,filled=0;
+    const isEmpty=v=>v==null||String(v).trim()==='';
     for(const row of rows){
       const k=row[SN_KEY]||JSON.stringify(row);
-      if(seen.has(k)){dups++;continue;}
-      seen.add(k);existing.push(row);added++;
+      const cur=byKey.get(k);
+      if(cur){
+        // 같은 시리얼 → 기존 행의 빈 칸만 새 값으로 채움 (기존 값이 있으면 유지)
+        let changed=false;
+        for(const key in row){
+          if(!isEmpty(row[key])&&isEmpty(cur[key])){cur[key]=row[key];changed=true;}
+        }
+        if(changed)filled++;
+        dups++;continue;
+      }
+      byKey.set(k,row);existing.push(row);added++;
     }
-    addedTotal+=added;dupsTotal+=dups;
+    addedTotal+=added;dupsTotal+=dups;filledTotal+=filled;
     filesToPush.push({path:shardPath,content:JSON.stringify(existing)});
     const es=index.shards.find(s=>s.file===shardFile);
     if(es)es.count=existing.length;
@@ -1417,7 +1428,7 @@ async function mergeAndPushDb(token,newRows,newHeaders){
   index.lastUpdate=new Date().toISOString().slice(0,16).replace('T',' ')+' UTC';
   filesToPush.push({path:'data/db.json',content:JSON.stringify(index)});
   await pushFilesViaGitApi(token,filesToPush);
-  return{added:addedTotal,dups:dupsTotal,total:index.totalCount};
+  return{added:addedTotal,dups:dupsTotal,filled:filledTotal,total:index.totalCount};
 }
 
 // ── GitHub xlsx 저장 (다중 파일) ──
@@ -1473,7 +1484,7 @@ async function saveToGitHub(){
   if(done>0){
     const s=document.getElementById('uploadSuccess');s.style.display='block';
     document.getElementById('uploadSuccessMsg').innerHTML=dbResult
-      ?`✅ <strong>${done}개 파일</strong> 업로드 완료 &amp; DB 즉시 업데이트!<br>총 <strong>${dbResult.total.toLocaleString()}건</strong> (이번 +${dbResult.added}건)<br>🔄 S/N 검색 탭에서 새로고침 버튼 클릭`
+      ?`✅ <strong>${done}개 파일</strong> 업로드 완료 &amp; DB 즉시 업데이트!<br>총 <strong>${dbResult.total.toLocaleString()}건</strong> (이번 +${dbResult.added}건${dbResult.filled?`, 빈칸 채움 ${dbResult.filled}건`:''})<br>🔄 S/N 검색 탭에서 새로고침 버튼 클릭`
       :`✅ <strong>${done}개 파일</strong> GitHub 저장 완료`;
     showToast(`✅ ${done}개 업로드 완료!`);
     if(!failed.length)resetUpload();
@@ -1522,7 +1533,7 @@ async function saveHtmlToGitHub(){
     const now=new Date();
     const pad=n=>String(n).padStart(2,'0');
     const nowUtc=`${now.getUTCFullYear()}-${pad(now.getUTCMonth()+1)}-${pad(now.getUTCDate())} ${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())}:${pad(now.getUTCSeconds())} UTC`;
-    const injected=htmlFileContent.replace(/const HTML_UPDATED='2026-07-23 03:26:01 UTC']*'/,`const HTML_UPDATED='2026-07-23 03:26:01 UTC'`);
+    const injected=htmlFileContent.replace(/const HTML_UPDATED='2026-07-30 07:55:05 UTC']*'/,`const HTML_UPDATED='2026-07-30 07:55:05 UTC'`);
     const base64=btoa(unescape(encodeURIComponent(injected)));
     const chk=await fetch(apiUrl,{headers:{'Authorization':`token ${token}`,'Accept':'application/vnd.github.v3+json'}});
     if(!chk.ok)throw new Error('기존 파일 조회 실패');
